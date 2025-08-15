@@ -43,18 +43,11 @@ class User(Base):
 
 class Chat(Base):
     __tablename__ = 'chats'
-
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    
     chat_type: Mapped[ChatType] = mapped_column(Enum(ChatType), nullable=False)
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    avatar_url: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
-    created_by: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    creator: Mapped['User'] = relationship('User', foreign_keys=[created_by])
     participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat')
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan")
 
@@ -62,13 +55,9 @@ class Chat(Base):
 class ChatParticipant(Base):
     __tablename__ = 'chat_participants'
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.MEMBER)
-    joined_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    left_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='participants')
     user: Mapped['User'] = relationship('User', back_populates='chat_participants')
@@ -85,8 +74,6 @@ class Message(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False)
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=func.now(), onupdate=func.now())
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages')
