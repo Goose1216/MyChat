@@ -36,14 +36,5 @@ class UserSchemaFromBd(BaseModel):
 
 
 class UserSchemaLogin(BaseModel):
-    username: str | None = Field(default=None, min_length=3, max_length=50)
-    email: EmailStr | None = Field(default=None, description="Valid email address")
+    username_or_email: str
     password: str
-
-    @validator('username', 'email')
-    def validate_login_fields(cls, v, values):
-        """Проверяем, что передан хотя бы один из способов входа"""
-        if 'username' not in values and 'email' not in values:
-            if v is None:
-                raise ValueError('Either username or email must be provided')
-        return v

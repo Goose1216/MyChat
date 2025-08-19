@@ -3,6 +3,7 @@ from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, 
 from datetime import datetime
 from typing import Optional, List
 import enum
+import uuid
 
 from .database import Base
 
@@ -61,10 +62,22 @@ class ChatParticipant(Base):
 class Message(Base):
     __tablename__ = 'messages'
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False)
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages')
+
+
+class RefreshTokens(Base):
+    __tablename__ = 'refresh_tokens'
+
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    token: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    is_revoked: Mapped[bool] = mapped_column(Boolean, default=False)
+    session_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True,
+                                            default=lambda: str(uuid.uuid4()))
+
+    user = relationship("User", backref="refresh_tokens")
