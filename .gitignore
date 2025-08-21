@@ -1,2 +1,5 @@
 .idea
 .pytest_cache
+
+backend/.env
+backend/.coverage
