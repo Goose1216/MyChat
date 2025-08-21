@@ -15,7 +15,6 @@ users = APIRouter(
 async def get_unit_of_work():
     return UnitOfWork()
 
-@users.post("/register")
 async def add_user(user_data: UserSchemaRegister, uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)
     
