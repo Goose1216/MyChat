@@ -62,7 +62,6 @@ async def test_register_conflict_email(client: AsyncClient):
     res2 = await client.post("/users/register", json=payload2)
     assert res2.status_code == 409
 
-@pytest.mark.slow
 @pytest.mark.asyncio
 async def test_refresh_token_success_and_fail(client: AsyncClient):
     reg_payload = {"username": "refresh_user", "email": "refresh@mail.ru", "password": "Qwas1234", "phone": "+79945250944"}
