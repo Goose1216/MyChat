@@ -20,18 +20,17 @@ class UserService:
 
     async def check_credentials(self, username_or_email: str, input_password: str):
         async with self.uow as uow:
-            res = await uow.user.check_password(username_or_email=username_or_email, input_password=input_password)
+            res = await uow.user.check_credentials(username_or_email=username_or_email, input_password=input_password)
             return res
 
     async def get_by_email_or_username(self, username_or_email: str):
-        #устаревшее скорее всего можно удалить
          async with self.uow as uow:
             res = await uow.user.get_by_email_or_username(username_or_email)
             return res
 
-    async def create_jwt_tokens(self, user_id: int, username: str, session_id: str | None = None):
+    async def create_jwt_tokens(self, username_or_email: str, user_id: int | None = None, session_id: str | None = None):
         async with self.uow as uow:
-            tokens = await uow.user.create_jwt_tokens(user_id, username, session_id)
+            tokens = await uow.user.create_jwt_tokens(user_id=user_id, username_or_email=username_or_email, session_id=session_id)
             await uow.commit()
             return tokens
 

@@ -67,7 +67,6 @@ class UserRepository(Repository):
     model = User
 
     async def get_by_email_or_username(self, username_or_email: str):
-        #Для избежании коллизий надо запретить ставить @ в username
         stmt = select(self.model).where(
             or_(
                 self.model.email == username_or_email,
@@ -113,9 +112,13 @@ class UserRepository(Repository):
         else:
             return False
 
-    async def create_jwt_tokens(self, user_id: int, username: str, session_id: str | None = None):
+    async def create_jwt_tokens(self, username_or_email: str, user_id: int | None = None, session_id: str | None = None):
         if session_id is None:
             session_id = str(uuid.uuid4())
+        user = await self._get_credentials_by_username_or_email(username_or_email=username_or_email)
+        username = user['username']
+        user_id = user['user_id'] if user_id is None else user_id
+
         data = {"user_id" : user_id, "username": username, "session_id": session_id}
         tokens = security.create_jwt_tokens(data)
         if tokens:

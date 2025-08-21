@@ -1,38 +1,54 @@
-from pydantic import BaseModel, Field, EmailStr, validator
+from pydantic import BaseModel, Field, EmailStr, field_validator, ConfigDict
+import phonenumbers
 import re
 
 
 class UserSchemaRegister(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: EmailStr = Field(description="Valid email address")
-    phone: str = Field(
-        pattern=r'^\+?[1-9]\d{1,14}$',
-        description="Phone number in international format"
-    )
+    phone: str = Field(description="Phone number in international format")
     password: str
 
-    @validator('phone')
-    def validate_phone(cls, v):
-        """Нормализация номера телефона"""
-        v = re.sub(r'[\s\-\(\)]', '', v)
-        
-        if v.startswith('8'):
-            v = '+7' + v[1:]
-        
-        if not v.startswith('+'):
-            v = '+' + v
-            
+    @field_validator('phone')
+    def validate_phone(cls, v: str) -> str:
+        try:
+            parsed = phonenumbers.parse(v, "RU")
+
+            if not phonenumbers.is_possible_number(parsed):
+                raise ValueError("Invalid number phone")
+
+            if not phonenumbers.is_valid_number(parsed):
+                raise ValueError("Invalid number phone")
+
+            return phonenumbers.format_number(parsed, phonenumbers.PhoneNumberFormat.E164)
+
+        except Exception:
+            raise ValueError("Invalid number phone")
+
+    @field_validator("username")
+    def validate_username(cls, v: str) -> str:
+        if not re.match(r"^[A-Za-z0-9_]+$", v):
+            raise ValueError("Username can only contain Latin letters, digits, and '_'")
+        return v
+
+    @field_validator("password")
+    def validate_password(cls, v: str) -> str:
+        if len(v) < 8:
+            raise ValueError("Password must contain at least 8 characters")
+        if not re.search(r"[A-Z]", v):
+            raise ValueError("Password must contain at least one uppercase letter")
+        if not re.search(r"[a-z]", v):
+            raise ValueError("Password must contain at least one lowercase letter")
         return v
 
 
 class UserSchemaFromBd(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     username: str
     email: str
     phone: str
-
-    class Config:
-        from_attributes = True
 
 
 class UserSchemaLogin(BaseModel):

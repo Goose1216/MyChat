@@ -22,29 +22,30 @@ async def add_user(user_data: UserSchemaRegister, uow: IUnitOfWork = Depends(get
     existing_user = await user_service.get_by_email_or_username(
         username_or_email=user_data.email
     )
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this email already exists"
+        )
 
-    if existing_user:
-        if existing_user['email'] == user_data.email:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="User with this email already exists"
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail="User with this username already exists"
-            )
-    
+    existing_user = await user_service.get_by_email_or_username(
+        username_or_email=user_data.username
+    )
+    if existing_user is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="User with this email already exists"
+        )
+
     return await user_service.register(user_data)
 
 @users.post("/login")
 async def login_user(user_data: UserSchemaLogin, uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)
 
-    if user_service.check_credentials(input_password=user_data.password, username_or_email=user_data.username_or_email):
+    if await user_service.check_credentials(input_password=user_data.password, username_or_email=user_data.username_or_email):
         tokens = await user_service.create_jwt_tokens(
-            user_id=user_data.user_id,
-            username = user_data.username
+            username_or_email = user_data.username_or_email
         )
         if tokens:
             return tokens
@@ -75,7 +76,7 @@ async def update_tokens(refresh_token: Dict = Depends(security.decode_jwt), uow:
         if is_token:
             tokens = await user_service.create_jwt_tokens(
                 user_id=refresh_token['user_id'],
-                username=refresh_token['username'],
+                username_or_email=refresh_token['username'],
                 session_id=refresh_token['session_id']
             )
             if tokens:
