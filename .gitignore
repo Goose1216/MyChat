@@ -1,5 +1,19 @@
 .idea
 .pytest_cache
 
-backend/.env
-backend/.coverage
+.env
+.venv/
+.idea/
+
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+*.coverage
+*.cov
+*.lcov
