@@ -40,8 +40,8 @@ class Chat(Base):
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat')
-    messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan")
+    participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat', lazy='selectin')
+    messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan", lazy='selectin')
 
 
 class ChatParticipant(Base):
