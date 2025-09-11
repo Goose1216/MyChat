@@ -12,6 +12,7 @@ class ChatType(str, enum.Enum):
     PRIVATE = "private"
     GROUP = "group"
     CHANNEL = "channel"
+    SHARED = "shared"
 
 
 class UserRole(str, enum.Enum):
@@ -43,6 +44,8 @@ class Chat(Base):
     participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat', lazy='selectin')
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan", lazy='selectin')
 
+    private_chat: Mapped[Optional["PrivateChat"]] = relationship('PrivateChat', uselist=False, back_populates='chat')
+
 
 class ChatParticipant(Base):
     __tablename__ = 'chat_participants'
@@ -56,6 +59,21 @@ class ChatParticipant(Base):
 
     __table_args__ = (
         UniqueConstraint('chat_id', 'user_id', name='unique_chat_user'),
+    )
+
+
+class PrivateChat(Base):
+    __tablename__ = 'private_chats'
+
+    chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False, unique=True)
+
+    user1_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
+    user2_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
+
+    chat: Mapped["Chat"] = relationship('Chat', back_populates='private_chat')
+
+    __table_args__ = (
+        UniqueConstraint('user1_id', 'user2_id', name='uq_privatechat_user_pair'),
     )
 
 

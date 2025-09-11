@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.repositories.repositories import UserRepository, ChatRepository, ChatParticipantRepository, MessageRepository
+from app.repositories.repositories import UserRepository, ChatRepository, ChatParticipantRepository, MessageRepository, PrivateChatRepository
 from app.db.database import async_session_maker
 
 
@@ -36,6 +36,7 @@ class UnitOfWork(IUnitOfWork):
 
         self.user = UserRepository(self.session)
         self.chat = ChatRepository(self.session)
+        self.chat_private = PrivateChatRepository(self.session)
         self.chat_participant = ChatParticipantRepository(self.session)
         self.message = MessageRepository(self.session)
         return self
@@ -50,5 +51,3 @@ class UnitOfWork(IUnitOfWork):
 
     async def rollback(self):
         await self.session.rollback()
-
-

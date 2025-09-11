@@ -4,6 +4,7 @@ from app.services.services import ChatService
 from app.app.schemas.chats import ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema, ChatCreateSchemaForEndpoint
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork
 from app.security import security
+from app.db.models import ChatType
 
 async def get_unit_of_work():
     return UnitOfWork()
@@ -54,7 +55,7 @@ async def websocket_endpoint(websocket: WebSocket, chat_id: int, user_id: int, u
         manager.disconnect(chat_id=chat_id, user_id=user_id)
         await manager.broadcast(message=f"{'username'} (ID: {user_id}) покинул чат.", chat_id=chat_id, sender_id=user_id)
 
-@chats.get('')
+@chats.get('/get_all_chat')
 async def get_all_chat_for_user(access_token = Depends(security.decode_jwt), uow: IUnitOfWork = Depends(get_unit_of_work)):
     if access_token.get('type') == 'access':
         user_id = access_token.get("user_id")
@@ -69,13 +70,14 @@ async def create_chat(info_for_created_chat: ChatCreateSchemaForEndpoint,
                       uow: IUnitOfWork = Depends(get_unit_of_work)
                       ):
     if access_token.get('type') == 'access':
-        user1_id = access_token.get("user_id")
+        user2_id = info_for_created_chat.user2_id
+
+        user_id = access_token.get("user_id")
         chat_service = ChatService(uow)
 
         created_chat_dict = info_for_created_chat.model_dump()
-        created_chat_dict['user1_id'] = user1_id
-        print(created_chat_dict)
+        created_chat_dict['user_id'] = user_id
         created_chat = ChatCreateSchema.model_validate(created_chat_dict)
-        return await chat_service.create_chat(created_chat)
+        return await chat_service.create_chat(created_chat, user2_id)
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")

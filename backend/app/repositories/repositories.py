@@ -1,6 +1,6 @@
 import uuid
 
-from app.db.models import User, Chat, ChatParticipant, Message, RefreshTokens
+from app.db.models import User, Chat, ChatParticipant, Message, RefreshTokens, PrivateChat
 from abc import ABC, abstractmethod
 from sqlalchemy import insert, select, update, delete, or_, and_
 from app.db.database import AsyncSession
@@ -168,20 +168,28 @@ class ChatParticipantRepository(Repository):
     model = ChatParticipant
 
     async def get_one(self, chat_id: int, user_id: int):
+        # переместить логику в Chat
         stmt = select(self.model).where(and_(self.model.chat_id == chat_id, self.model.user_id == user_id))
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
-
-    async def get_all_for_user(self, user_id: int):
-        stmt = select(self.model).where(self.model.user_id == user_id)
-        res = await self.session.execute(stmt)
-        return res.scalars().all()
-
 
 
 class ChatRepository(Repository):
     model = Chat
 
+    async def get_all_for_user(self, user_id: int):
+        stmt = (
+            select(self.model)
+            .join(ChatParticipant, Chat.id == ChatParticipant.chat_id)
+            .where(ChatParticipant.user_id == user_id)
+        )
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
+
 
 class MessageRepository(Repository):
     model = Message
+
+
+class PrivateChatRepository(Repository):
+    model = PrivateChat
