@@ -1,8 +1,10 @@
 import uuid
-
-from app.db.models import User, Chat, ChatParticipant, Message, RefreshTokens, PrivateChat
 from abc import ABC, abstractmethod
 from sqlalchemy import insert, select, update, delete, or_, and_
+from typing import Optional
+
+from app.db.models import User, Chat, ChatParticipant, Message, RefreshTokens, PrivateChat
+
 from app.db.database import AsyncSession
 from app.security import security
 
@@ -65,6 +67,17 @@ class Repository(ABC):
 
 class UserRepository(Repository):
     model = User
+
+    async def check_user_exists(self, email: str, username: str, phone: str | None):
+        stmt = select(User).where(
+            or_(
+                User.email == email,
+                User.username == username,
+                User.phone == phone if phone else False
+            )
+        )
+        res = await self.session.execute(stmt)
+        return res.scalars().first()
 
     async def get_by_email_or_username(self, username_or_email: str):
         stmt = select(self.model).where(

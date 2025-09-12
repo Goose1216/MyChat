@@ -18,24 +18,15 @@ async def get_unit_of_work():
 @users.post("/register")
 async def add_user(user_data: UserSchemaRegister, uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)
-    
-    existing_user = await user_service.get_by_email_or_username(
-        username_or_email=user_data.email
-    )
-    if existing_user is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists"
-        )
 
-    existing_user = await user_service.get_by_email_or_username(
-        username_or_email=user_data.username
-    )
-    if existing_user is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="User with this email already exists"
-        )
+    existing_user = await user_service.check_user_exists(user_data)
+    if existing_user:
+        if existing_user.email == user_data.email:
+            raise HTTPException(status_code=409, detail="User with this email already exists")
+        elif existing_user.username == user_data.username:
+            raise HTTPException(status_code=409, detail="User with this username already exists")
+        elif existing_user.phone == user_data.phone:
+            raise HTTPException(status_code=409, detail="User with this phone already exists")
 
     return await user_service.register(user_data)
 

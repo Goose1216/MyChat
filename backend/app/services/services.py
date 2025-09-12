@@ -1,3 +1,5 @@
+from fastapi import HTTPException
+
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
 from app.app.schemas.chats import ChatCreateSchema, ChatParticipantSchema, MessageSchema, ChatSchemaFromBd, ChatPrivateCreateSchema
@@ -18,6 +20,16 @@ class UserService:
             user_from_db = await uow.user.add_one(user_data)
             user_for_return = UserSchemaFromBd.model_validate(user_from_db)
             await uow.commit()
+            return user_for_return
+
+    async def check_user_exists(self, user_data: UserSchemaRegister):
+        async with self.uow as uow:
+            existing_user = await uow.user.check_user_exists(
+                email=user_data.email,
+                username=user_data.username,
+                phone=user_data.phone
+            )
+            user_for_return = UserSchemaFromBd.model_validate(existing_user) if existing_user is not None else None
             return user_for_return
 
     async def check_credentials(self, username_or_email: str, input_password: str):

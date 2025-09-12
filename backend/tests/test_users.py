@@ -23,15 +23,26 @@ async def test_register(payload, expected_status, client):
         assert 'id' in data
         assert data['username'] == payload['username']
 
+@pytest.mark.parametrize(
+    "payload, expected_status, detail",
+    [
+        ({"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 409, 'User with this email already exists'),
+        ({"username": "test_user", "email": "test_new@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 409, 'User with this username already exists'),
+        ({"username": "test_new_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 409, 'User with this email already exists'),
+        ({"username": "test_new_user", "email": "test_new@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 409, 'User with this phone already exists'),
+        ({"username": "test_new_user", "email": "test_new@mail.ru", 'password': "Qwas1234", 'phone': "+79945250941"}, 200, None),
+    ]
+)
 @pytest.mark.asyncio
-async def test_register_conflict_user(client):
-    payload = {"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}
-    res = await client.post('/users/register', json=payload)
+async def test_register_conflict_user(payload, expected_status, detail, client):
+    payload_old = {"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}
+    res = await client.post('/users/register', json=payload_old)
     assert res.status_code == 200
 
-    payload = {"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}
     res = await client.post('/users/register', json=payload)
-    assert res.status_code == 409
+    print(res.json().get('detail'))
+    assert res.json().get('detail') == detail
+    assert res.status_code == expected_status
 
 
 @pytest.mark.parametrize(
@@ -51,16 +62,6 @@ async def test_login(payload, expected_status, client):
 
     response = await client.post('/users/login', json=payload)
     assert response.status_code == expected_status
-
-@pytest.mark.asyncio
-async def test_register_conflict_email(client: AsyncClient):
-    payload = {"username": "unique_user", "email": "same@mail.ru", "password": "Qwas1234", "phone": "+79945250944"}
-    res = await client.post("/users/register", json=payload)
-    assert res.status_code == 200
-
-    payload2 = {"username": "another_user", "email": "same@mail.ru", "password": "Qwas1234", "phone": "+79945250944"}
-    res2 = await client.post("/users/register", json=payload2)
-    assert res2.status_code == 409
 
 @pytest.mark.asyncio
 async def test_refresh_token_success_and_fail(client: AsyncClient):
