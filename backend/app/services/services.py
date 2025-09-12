@@ -1,4 +1,5 @@
-from fastapi import HTTPException
+from fastapi import HTTPException, status
+
 
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
@@ -101,13 +102,18 @@ class ChatService:
             else:
                 raise Exception("Чата нет")
 
-    async def get_chat(self, chat_id: int):
+    async def get_chat(self, chat_id: int, user_id: int):
         async with self.uow as uow:
-            chat = await uow.chat.get_one(chat_id, )
-            return chat
+            chat = await uow.chat.get_one(chat_id)
+            if not chat:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
-    async def is_user_in_chat(self, chat_id: int, user_id: int):
-        pass
+            chat_for_user = await uow.chat.get_one_for_user(chat_id, user_id)
+            if not chat_for_user:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden")
+
+            return chat_for_user
+
 
     async def get_all_for_user(self, user_id: int):
         async with self.uow as uow:

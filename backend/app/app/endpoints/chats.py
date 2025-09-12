@@ -39,23 +39,40 @@ chats = APIRouter(
 
 manager = ConnectionManager()
 
+async def get_current_user_ws(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token:
+        auth_header = websocket.headers.get("Authorization")
+        if auth_header and auth_header.startswith("Bearer "):
+            token = auth_header.split(" ", 1)[1]
+    if not token:
+        raise HTTPException(status_code=401, detail="Token missing")
 
-@chats.websocket("/{chat_id}/{user_id}")
-async def websocket_endpoint(websocket: WebSocket, chat_id: int, user_id: int, uow: IUnitOfWork = Depends(get_unit_of_work)):
-    chat_service = ChatService(uow)
+    return await security.decode_jwt(token)
 
-    await manager.connect(websocket, chat_id=chat_id, user_id=user_id)
-    await manager.broadcast(f"{'username'} (ID: {user_id}) присоединился к чату.", chat_id=chat_id, sender_id=user_id)
+@chats.websocket("/{chat_id}")
+async def websocket_endpoint(chat_id: int, websocket: WebSocket, access_token: dict = Depends(get_current_user_ws), uow: IUnitOfWork = Depends(get_unit_of_work)):
+    if access_token.get('type') == 'access':
+        user_id = access_token.get("user_id")
+        chat_service = ChatService(uow)
+        chat = await chat_service.get_chat(chat_id, user_id)
 
-    try:
-        while True:
-            data = await websocket.receive_text()
-            await manager.broadcast(message=f"{'username'} (ID: {user_id}): {data}", chat_id=chat_id, sender_id=user_id)
-    except WebSocketDisconnect:
-        manager.disconnect(chat_id=chat_id, user_id=user_id)
-        await manager.broadcast(message=f"{'username'} (ID: {user_id}) покинул чат.", chat_id=chat_id, sender_id=user_id)
+        await manager.connect(websocket, chat_id=chat_id, user_id=user_id)
+        await manager.broadcast(f"{'username'} (ID: {user_id}) присоединился к чату.", chat_id=chat_id,
+                                sender_id=user_id)
+        try:
+            while True:
+                data = await websocket.receive_text()
+                await manager.broadcast(message=f"{'username'} (ID: {user_id}): {data}", chat_id=chat_id,
+                                        sender_id=user_id)
+        except WebSocketDisconnect:
+            manager.disconnect(chat_id=chat_id, user_id=user_id)
+            await manager.broadcast(message=f"{'username'} (ID: {user_id}) покинул чат.", chat_id=chat_id,
+                                    sender_id=user_id)
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
 
-@chats.get('/get_all_chat')
+@chats.get('')
 async def get_all_chat_for_user(access_token = Depends(security.decode_jwt), uow: IUnitOfWork = Depends(get_unit_of_work)):
     if access_token.get('type') == 'access':
         user_id = access_token.get("user_id")
