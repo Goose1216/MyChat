@@ -58,6 +58,11 @@ class ChatParticipantSchema(BaseModel):
     role: UserRole
 
 
+class ChatParticipantSchemaForAddUser(BaseModel):
+    user_id: int
+    chat_id: int
+
+
 class MessageSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -75,11 +80,3 @@ class ChatSchemaFromBd(BaseModel):
     title: str | None = None
     description: str | None = None
 
-
-class ChatSchemaFromBdShort(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    chat_type: ChatType
-    title: str | None = None
-    messages: List[MessageSchema] = []

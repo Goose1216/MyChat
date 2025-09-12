@@ -1,9 +1,10 @@
 from fastapi import HTTPException, status
-
+from sqlalchemy.exc import IntegrityError
 
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
-from app.app.schemas.chats import ChatCreateSchema, ChatParticipantSchema, MessageSchema, ChatSchemaFromBd, ChatPrivateCreateSchema
+from app.app.schemas.chats import (ChatCreateSchema, ChatParticipantSchema, MessageSchema,
+                                   ChatSchemaFromBd, ChatPrivateCreateSchema, ChatParticipantSchemaForAddUser)
 from app.security import security
 from app.db.models import ChatType, UserRole
 
@@ -88,32 +89,43 @@ class ChatService:
             return chat_for_return
 
 
-    async def add_user_in_chat(self, user_info: ChatParticipantSchema):
-        #Не тестировалась
-        user = user_info.model_dump()
+    async def add_user_in_chat(self, user_who_add_id: int, info: ChatParticipantSchemaForAddUser):
+        info_for_add = info.model_dump()
         async with self.uow as uow:
-            chat_id = user.chat_id
-            chat = await uow.chat.get_one(chat_id, )
-            if chat:
-                chat_participant = await uow.chat_participant.add_one(user_info)
+            chat_id = info_for_add.get("chat_id")
+
+            #Проверка, что тот кто пытается добавить - сам состоит в чате
+            await self._get_chat(chat_id, user_who_add_id, uow)
+
+            try:
+                chat_participant = await uow.chat_participant.add_one(info_for_add)
                 chat_participant_for_return = ChatParticipantSchema.model_validate(chat_participant)
                 await uow.commit()
-                return chat_participant_for_return
-            else:
-                raise Exception("Чата нет")
+            except IntegrityError:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="User already in chat"
+                )
+            return chat_participant_for_return
 
     async def get_chat(self, chat_id: int, user_id: int):
         async with self.uow as uow:
-            chat = await uow.chat.get_one(chat_id)
-            if not chat:
-                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
+            return await self._get_chat(chat_id, user_id, uow)
 
-            chat_for_user = await uow.chat.get_one_for_user(chat_id, user_id)
-            if not chat_for_user:
-                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden")
+    async def _get_chat(self, chat_id: int, user_id: int, uow):
+        """
+        Переиспользуется в методах get_chat и add_user_in_chat,
+        сделано чтоб при вызове внутри add_user_in_chat не дублировался uow из-за контекстного менеджера
+        """
+        chat = await uow.chat.get_one(chat_id)
+        if not chat:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chat not found")
 
-            return chat_for_user
+        chat_for_user = await uow.chat.get_one_for_user(chat_id, user_id)
+        if not chat_for_user:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access forbidden")
 
+        return chat_for_user
 
     async def get_all_for_user(self, user_id: int):
         async with self.uow as uow:

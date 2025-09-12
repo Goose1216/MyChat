@@ -1,7 +1,8 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, HTTPException
 from typing import Dict
 from app.services.services import ChatService
-from app.app.schemas.chats import ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema, ChatCreateSchemaForEndpoint
+from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
+                                   ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork
 from app.security import security
 from app.db.models import ChatType
@@ -51,7 +52,12 @@ async def get_current_user_ws(websocket: WebSocket):
     return await security.decode_jwt(token)
 
 @chats.websocket("/{chat_id}")
-async def websocket_endpoint(chat_id: int, websocket: WebSocket, access_token: dict = Depends(get_current_user_ws), uow: IUnitOfWork = Depends(get_unit_of_work)):
+async def websocket_endpoint(
+                            chat_id: int,
+                            websocket: WebSocket,
+                            access_token: dict = Depends(get_current_user_ws),
+                            uow: IUnitOfWork = Depends(get_unit_of_work)
+                            ):
     if access_token.get('type') == 'access':
         user_id = access_token.get("user_id")
         chat_service = ChatService(uow)
@@ -81,8 +87,24 @@ async def get_all_chat_for_user(access_token = Depends(security.decode_jwt), uow
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
 
+@chats.post("/add_user")
+async def add_user_in_chat(
+                            info_for_add_user: ChatParticipantSchemaForAddUser,
+                            access_token = Depends(security.decode_jwt),
+                            uow: IUnitOfWork = Depends(get_unit_of_work)
+                            ):
+    if access_token.get('type') == 'access':
+        chat_service = ChatService(uow)
+        user_who_add = access_token.get("user_id")
+
+        return await chat_service.add_user_in_chat(user_who_add, info_for_add_user)
+
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
+
 @chats.post("/create")
-async def create_chat(info_for_created_chat: ChatCreateSchemaForEndpoint,
+async def create_chat(
+                      info_for_created_chat: ChatCreateSchemaForEndpoint,
                       access_token = Depends(security.decode_jwt),
                       uow: IUnitOfWork = Depends(get_unit_of_work)
                       ):

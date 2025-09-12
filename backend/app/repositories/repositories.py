@@ -1,7 +1,6 @@
 import uuid
 from abc import ABC, abstractmethod
 from sqlalchemy import insert, select, update, delete, or_, and_
-from typing import Optional
 
 from app.db.models import User, Chat, ChatParticipant, Message, RefreshTokens, PrivateChat
 
