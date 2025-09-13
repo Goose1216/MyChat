@@ -5,7 +5,7 @@ from app.security import security
 @pytest.mark.parametrize(
     "payload, expected_status",
     [
-        ({"username": "goose12161", "email": "goose@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 200),
+        ({"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 200),
         ({"username": "user2", "email": "invalid-email", 'password': "Qwas1234", 'phone': "+79945250944"}, 422),
         ({"username": "user-with-invalid-phone", "email": "goose@mail.ru", 'password': "Qwas1234", 'phone': "+7994525094"}, 422),
         ({"username": "", "email": "goose@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}, 422),
@@ -35,15 +35,10 @@ async def test_register(payload, expected_status, client):
 )
 @pytest.mark.asyncio
 async def test_register_conflict_user(payload, expected_status, detail, client):
-    payload_old = {"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}
-    res = await client.post('/users/register', json=payload_old)
-    assert res.status_code == 200
 
     res = await client.post('/users/register', json=payload)
-    print(res.json().get('detail'))
     assert res.json().get('detail') == detail
     assert res.status_code == expected_status
-
 
 @pytest.mark.parametrize(
     "payload, expected_status",
@@ -56,16 +51,12 @@ async def test_register_conflict_user(payload, expected_status, detail, client):
 )
 @pytest.mark.asyncio
 async def test_login(payload, expected_status, client):
-    payload_reg = {"username": "test_user", "email": "test@mail.ru", 'password': "Qwas1234", 'phone': "+79945250944"}
-    res = await client.post('/users/register', json=payload_reg)
-    assert res.status_code == 200
-
     response = await client.post('/users/login', json=payload)
     assert response.status_code == expected_status
 
 @pytest.mark.asyncio
 async def test_refresh_token_success_and_fail(client: AsyncClient):
-    reg_payload = {"username": "refresh_user", "email": "refresh@mail.ru", "password": "Qwas1234", "phone": "+79945250944"}
+    reg_payload = {"username": "refresh_user", "email": "refresh@mail.ru", "password": "Qwas1234", "phone": "+79915250941"}
     res = await client.post("/users/register", json=reg_payload)
     assert res.status_code == 200
 

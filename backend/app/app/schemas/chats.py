@@ -32,7 +32,7 @@ class ChatCreateSchemaForEndpoint(BaseModel):
         title = data.get("title")
         chat_type = data.get('chat_type')
         if title is None and chat_type != ChatType.PRIVATE:
-            raise ValueError('need title for not chat')
+            raise ValueError('need title for not private chat')
         return data
 
 class ChatPrivateCreateSchema(BaseModel):
