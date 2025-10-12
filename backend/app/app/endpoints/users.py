@@ -15,6 +15,15 @@ users = APIRouter(
 async def get_unit_of_work():
     return UnitOfWork()
 
+@users.get("/me")
+async def get_user(access_token = Depends(security.decode_jwt), uow: IUnitOfWork = Depends(get_unit_of_work)):
+    if access_token.get('type') == 'access':
+        user_id = access_token.get("user_id")
+        user_service = UserService(uow)
+        return await user_service.get_by_id(user_id)
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
+
 @users.post("/register")
 async def add_user(user_data: UserSchemaRegister, uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)

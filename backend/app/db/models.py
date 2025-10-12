@@ -81,7 +81,7 @@ class Message(Base):
     __tablename__ = 'messages'
 
     chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False)
-    sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
+    sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')

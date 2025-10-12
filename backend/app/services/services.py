@@ -5,6 +5,7 @@ from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
 from app.app.schemas.chats import (ChatCreateSchema, ChatParticipantSchema, MessageSchema,
                                    ChatSchemaFromBd, ChatPrivateCreateSchema, ChatParticipantSchemaForAddUser)
+from app.app.schemas.message import MessageCreateSchema, MessageFromDbSchema
 from app.security import security
 from app.db.models import ChatType, UserRole
 
@@ -12,6 +13,12 @@ from app.db.models import ChatType, UserRole
 class UserService:
     def __init__(self, uow: IUnitOfWork):
         self.uow = uow
+
+    async def get_by_id(self, user_id: int):
+        async with self.uow as uow:
+            user_from_db = await uow.user.get_one(user_id)
+            user_for_return = UserSchemaFromBd.model_validate(user_from_db)
+            return user_for_return
 
     async def register(self, user: UserSchemaRegister):
         user_data = user.model_dump()
@@ -132,3 +139,24 @@ class ChatService:
             chats = await uow.chat.get_all_for_user(user_id)
             chats_for_return = [ChatSchemaFromBd.model_validate(chat) for chat in chats]
             return chats_for_return
+
+    async def get_members(self, chat_id: int, *, return_id: bool = False):
+        async with self.uow as uow:
+            users = await uow.user.get_all_members_for_chat(chat_id=chat_id)
+
+            if return_id:
+                id_for_return = [user.id for user in users]
+                return id_for_return
+            users_for_return = [UserSchemaFromBd.model_validate(user) for user in users]
+            return users_for_return
+
+class MessageService:
+    def __init__(self, uow: IUnitOfWork):
+        self.uow = uow
+
+    async def create_message(self, * chat_id: int, sender_id: int | None = None, data: str | None = None):
+        async with self.uow as uow:
+            message = await uow.message.add_one({"chat_id":chat_id, 'sender_id':sender_id, 'data':data})
+            message_for_return = MessageFromDbSchema.model_validate(message)
+            return message_for_return
+

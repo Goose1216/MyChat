@@ -96,6 +96,15 @@ class UserRepository(Repository):
             }
         return None
 
+    async def get_all_members_for_chat(self, chat_id: int):
+        stmt = (
+            select(self.model)
+            .join(ChatParticipant, self.model.id == ChatParticipant.user_id)
+            .where(ChatParticipant.chat_id == chat_id)
+        )
+        res = await self.session.sxecute(stmt)
+        return res.scalars().all()
+
     async def _get_credentials_by_username_or_email(self, username_or_email: str):
         stmt = select(self.model).where(
             or_(
@@ -201,8 +210,19 @@ class ChatRepository(Repository):
         res = await self.session.execute(stmt)
         return res.scalars().one_or_none()
 
+
+
 class MessageRepository(Repository):
     model = Message
+
+    async def get_all_for_chat(self, chat_id: int):
+        stmt = (
+            select(self.model)
+            .where(self.model.chat_id == chat_id)
+        )
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
+
 
 
 class PrivateChatRepository(Repository):
