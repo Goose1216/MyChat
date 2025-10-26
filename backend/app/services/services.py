@@ -21,6 +21,15 @@ class UserService:
             return user_for_return
 
     async def register(self, user: UserSchemaRegister):
+        existing_user = await self.check_user_exists(user)
+        if existing_user:
+            if existing_user.email == user.email:
+                raise HTTPException(status_code=409, detail="User with this email already exists")
+            elif existing_user.username == user.username:
+                raise HTTPException(status_code=409, detail="User with this username already exists")
+            elif existing_user.phone == user.phone:
+                raise HTTPException(status_code=409, detail="User with this phone already exists")
+
         user_data = user.model_dump()
         async with self.uow as uow:
             password = user_data['password']            
@@ -119,6 +128,14 @@ class ChatService:
         async with self.uow as uow:
             return await self._get_chat(chat_id, user_id, uow)
 
+    async def get_one_by(self, **kwargs):
+        async with self.uow as uow:
+            return await uow.user.get_one_by(**kwargs)
+
+    async def check_user_in_chat(self, chat_id: int, user_id: int):
+        async with self.uow as uow:
+            return await uow.chat_participant.get_one_by(chat_id=chat_id, user_id=user_id)
+
     async def _get_chat(self, chat_id: int, user_id: int, uow):
         """
         Переиспользуется в методах get_chat и add_user_in_chat,
@@ -154,9 +171,20 @@ class MessageService:
     def __init__(self, uow: IUnitOfWork):
         self.uow = uow
 
-    async def create_message(self, * chat_id: int, sender_id: int | None = None, data: str | None = None):
+    async def create_message(self, *, chat_id: int, sender_id: int | None = None, data: str | None = None):
         async with self.uow as uow:
-            message = await uow.message.add_one({"chat_id":chat_id, 'sender_id':sender_id, 'data':data})
+            if sender_id:
+                is_user_in_chat = await uow.chat_participant.get_one_by(chat_id=chat_id, user_id=sender_id)
+
+                if not is_user_in_chat:
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail="User not member of chat"
+                    )
+
+            message = await uow.message.add_one({"chat_id":chat_id, 'sender_id':sender_id, 'content':data})
             message_for_return = MessageFromDbSchema.model_validate(message)
+            await uow.commit()
+
             return message_for_return
 

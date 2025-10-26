@@ -14,12 +14,9 @@ async def get_unit_of_work():
 
 class ConnectionManager:
     def __init__(self):
-        # Хранение активных соединений: {user_id: Set[WebSocket]}
         self.active_connections: Dict[int, Set[WebSocket]] = {}
 
     async def connect(self, websocket: WebSocket, user_id: int):
-        await websocket.accept()
-
         if user_id not in self.active_connections:
             self.active_connections[user_id] = set()
         self.active_connections[user_id].add(websocket)
@@ -31,22 +28,21 @@ class ConnectionManager:
                 del self.active_connections[user_id]
 
     async def broadcast(self, message: str, chat_id: int, sender_id: int, receivers_id: list[int]):
-        #Здесь можно добавить проверку что пользователь есть в чате
         for receiver_id in receivers_id:
-            if receiver_id in self.active_connections and receiver_id != sender_id:
-                for connection in self.active_connections[receiver_id]:
+            if receiver_id in self.active_connections:
+                for connection in list(self.active_connections[receiver_id]):
                     try:
-                        answer_json = {
+                        await connection.send_json({
                             "text": message,
-                            'chat_id': chat_id,
-                            'sender_id': sender_id,
-                            'it_self': receiver_id == sender_id
-                        }
-                        await connection.send_json(answer_json)
+                            "chat_id": chat_id,
+                            "sender_id": sender_id,
+                            "it_self": receiver_id == sender_id
+                        })
                     except Exception:
                         self.active_connections[receiver_id].discard(connection)
                         if not self.active_connections[receiver_id]:
                             del self.active_connections[receiver_id]
+
 
 chats = APIRouter(
     tags=['Chats'],
@@ -67,49 +63,50 @@ async def get_current_user_ws(websocket: WebSocket):
     return await security.decode_jwt(token)
 
 @chats.websocket("/ws")
-async def websocket_endpoint(
-        websocket: WebSocket,
-        access_token: dict = Depends(get_current_user_ws),
-        uow: IUnitOfWork = Depends(get_unit_of_work)
-):
-    if access_token.get('type') != 'access':
+async def websocket_endpoint(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+
+    try:
+        access_token = await security.decode_jwt(token)
+        if access_token.get('type') != 'access':
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
+    except Exception:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
     user_id = access_token.get("user_id")
+    await websocket.accept()
+
+    uow = await get_unit_of_work()
     chat_service = ChatService(uow)
     message_service = MessageService(uow)
 
-    await manager.connect(websocket, user_id=user_id)
+    await manager.connect(websocket, user_id)
 
     try:
         while True:
-            data = await websocket.receive_text()
-
             try:
+                data = await websocket.receive_text()
                 message_data = json.loads(data)
                 chat_id = int(message_data.get("chat_id"))
-                message = message_data.get("text", "").strip()
+                text = message_data.get("text", "").strip()
 
-                if not await chat_service.is_user_in_chat(user_id, chat_id):
-                    await websocket.send_json({"error": "Not a member of this chat"})
-                    continue
+                await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
 
                 members_chat = await chat_service.get_members(chat_id, return_id=True)
 
-                await message_service.create_message(chat_id=chat_id, data=message, sender_id=user_id)
+                await manager.broadcast(message=text, chat_id=chat_id, sender_id=user_id, receivers_id=members_chat)
 
-                await manager.broadcast(
-                    message=message,
-                    chat_id=chat_id,
-                    sender_id=user_id,
-                    receivers_id=members_chat
-                )
-
-            except (ValueError, TypeError, KeyError) as e:
+            except (ValueError, KeyError):
                 await websocket.send_json({"error": "Invalid message format"})
             except Exception as e:
-                await websocket.send_json({"error": "Server error"})
+                #await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                #return
+                await websocket.send_json({"error": f"Server error: {str(e)}"})
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
@@ -137,7 +134,7 @@ async def add_user_in_chat(
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
 
-@chats.post("/create")
+@chats.post("")
 async def create_chat(
                       info_for_created_chat: ChatCreateSchemaForEndpoint,
                       access_token = Depends(security.decode_jwt),

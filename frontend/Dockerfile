@@ -7,11 +7,10 @@ COPY *.config.* ./
 COPY *.json ./
 
 RUN npm install
+RUN npm install framer-motion
+
 
 COPY src ./src
 COPY public ./public
 COPY index.html ./
 
-EXPOSE 5173
-
-CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
