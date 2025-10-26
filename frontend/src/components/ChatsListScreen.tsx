@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import CreateChatScreen from "./CreateChatScreen";
+import { fetchWithAuth } from "../api";
 
 export default function ChatsListScreen({
   access_token,
@@ -18,19 +19,18 @@ export default function ChatsListScreen({
 
   const fetchChats = async () => {
     if (!access_token) return;
-
     setLoading(true);
+
     try {
-      const res = await fetch(`${import.meta.env.VITE_API_URL}/chats`, {
-        headers: {
-          Authorization: `Bearer ${access_token}`,
-        },
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/chats`, {
+        method: "GET",
       });
 
       if (res.ok) {
         const data = await res.json();
         setChats(data);
       } else if (res.status === 401) {
+        // если вдруг не удалось обновить токен в fetchWithAuth (refresh протух)
         alert("Сессия истекла. Авторизуйтесь снова.");
         onLogout();
       } else {
@@ -49,7 +49,7 @@ export default function ChatsListScreen({
 
   return (
     <div className="p-6 space-y-6 min-h-screen bg-gray-100">
-      {/* Заголовок и кнопка выхода */}
+      {/* Заголовок и кнопки */}
       <div className="flex justify-between items-center">
         <h1 className="text-2xl font-bold text-gray-800">Ваши чаты</h1>
         <div className="space-x-3">
@@ -88,7 +88,6 @@ export default function ChatsListScreen({
         </ul>
       )}
 
-      {/* Модалка создания чата */}
       {showCreateChat && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-xl w-[400px] shadow-lg">
@@ -97,7 +96,7 @@ export default function ChatsListScreen({
             <CreateChatScreen
               onChatCreated={() => {
                 setShowCreateChat(false);
-                fetchChats(); // обновляем список после создания
+                fetchChats();
               }}
             />
 

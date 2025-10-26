@@ -40,15 +40,17 @@ export default function App() {
         }
       })();
     }
-  }, [token]);
+  }, []);
 
-  const handleLogin = (accessToken: string, id: number) => {
-    setToken(accessToken);
-    setUserId(id);
-    localStorage.setItem("access_token", accessToken);
-    localStorage.setItem("user_id", String(id));
-    setView("chats");
-  };
+const handleLogin = (accessToken: string, id: number, refreshToken?: string) => {
+  setToken(accessToken);
+  setUserId(id);
+  localStorage.setItem("access_token", accessToken);
+  if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+  localStorage.setItem("user_id", String(id));
+  setView("chats");
+};
+
 
   const handleLogout = () => {
     setToken(null);
