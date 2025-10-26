@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from "react";
 import type { Chat, Message } from "../types";
+import { fetchWithAuth } from "../api";
 
 export default function ChatScreen({
-  token,
   userId,
   chat,
   onBack,
 }: {
-  token: string;
   userId: number;
   chat: Chat;
   onBack: () => void;
@@ -18,45 +17,50 @@ export default function ChatScreen({
   const bottomRef = useRef<HTMLDivElement | null>(null);
 
   const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-  const WS_URL = API.replace(/^http/, "ws") + `/chats/ws?token=${token}`;
 
-  useEffect(() => {
-    const loadHistory = async () => {
-      try {
-        const res = await fetch(`${API}/chats/${chat.id}/messages`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+  // 🧠 динамически берём токен из localStorage при каждом подключении
+  const getToken = () => localStorage.getItem("access_token");
 
-        if (!res.ok) throw new Error("Ошибка при загрузке истории сообщений");
+  // Создание WebSocket с актуальным токеном
+  const createWsUrl = () => {
+    const token = getToken();
+    return API.replace(/^http/, "ws") + `/chats/ws?token=${token}`;
+  };
 
-        const data = await res.json();
+  // Загрузка истории сообщений
+  const loadHistory = async () => {
+    try {
+      const res = await fetchWithAuth(`${API}/chats/${chat.id}/messages`, {
+        method: "GET",
+      });
+      if (!res.ok) throw new Error(`Ошибка при загрузке истории: ${res.status}`);
 
-        setMessages(
-          data.map((m: any) => ({
-            id: m.id,
-            text: m.content,
-            sender_id: m.sender_id,
-            chat_id: m.chat_id,
-            is_self: m.sender_id === userId,
-            timestamp: m.created_at || new Date().toISOString(),
-          }))
-        );
-      } catch (err) {
-        console.error("Ошибка загрузки истории:", err);
-      }
-    };
+      const data = await res.json();
 
-    loadHistory();
-  }, [chat.id, token]);
+      setMessages(
+        data.map((m: any) => ({
+          id: m.id,
+          text: m.content,
+          sender_id: m.sender_id,
+          chat_id: m.chat_id,
+          is_self: m.sender_id === userId,
+          timestamp: m.created_at || new Date().toISOString(),
+        }))
+      );
+    } catch (err) {
+      console.error("Ошибка загрузки истории:", err);
+    }
+  };
 
+  // Подключение к WebSocket
   useEffect(() => {
     let stop = false;
     let reconnectTimer: any;
 
     const connect = () => {
-      const ws = new WebSocket(WS_URL);
+      const wsUrl = createWsUrl();
+      console.log("Подключение к WebSocket:", wsUrl);
+      const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -64,7 +68,7 @@ export default function ChatScreen({
       };
 
       ws.onclose = () => {
-        console.log("⚠️ WebSocket закрыт, переподключение...");
+        console.warn("⚠️ WebSocket закрыт, переподключение...");
         if (!stop) reconnectTimer = setTimeout(connect, 2500);
       };
 
@@ -74,7 +78,6 @@ export default function ChatScreen({
         try {
           const data = JSON.parse(e.data);
 
-          // Пришло новое сообщение в этот чат
           if (data.text && data.chat_id === chat.id) {
             setMessages((prev) => [
               ...prev,
@@ -88,7 +91,7 @@ export default function ChatScreen({
               },
             ]);
           } else if (data.error) {
-            console.error("Ошибка WS-сообщения:", data.error);
+            console.error("Ошибка WS:", data.error);
           }
         } catch (err) {
           console.error("Ошибка парсинга WS:", err);
@@ -103,7 +106,12 @@ export default function ChatScreen({
       wsRef.current?.close();
       clearTimeout(reconnectTimer);
     };
-  }, [chat.id, token]);
+  }, [chat.id]); // ⚠️ не зависим от token
+
+  // Загрузка истории один раз при монтировании
+  useEffect(() => {
+    loadHistory();
+  }, [chat.id]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
