@@ -1,79 +1,9 @@
 import uuid
-from abc import ABC, abstractmethod
 from sqlalchemy import insert, select, update, delete, or_, and_
 
-from app.db.models import User, Chat, ChatParticipant, Message, RefreshTokens, PrivateChat
-
-from app.db.database import AsyncSession
+from .base import Repository
+from app.db.models import User, ChatParticipant, RefreshTokens
 from app.security import security
-
-class AbstractRepository(ABC):
-    @abstractmethod
-    async def add_one(self, data: dict):
-        raise NotImplemented
-
-    @abstractmethod
-    async def get_all(self):
-        raise NotImplemented
-
-    @abstractmethod
-    async def get_one(self, pk: int):
-        raise NotImplemented
-
-    async def get_one_by(self, **kwargs):
-        raise NotImplemented
-
-    @abstractmethod
-    async def update(self, pk: int):
-        raise NotImplemented
-
-    @abstractmethod
-    async def delete(self, pk: int):
-        raise NotImplemented
-
-
-class Repository(ABC):
-    model = None
-
-    def __init__(self, session: AsyncSession):
-        self.session = session
-
-    async def add_one(self, data: dict):
-        stmt = insert(self.model).values(**data).returning(self.model)
-        res = await self.session.execute(stmt)
-        return res.scalar_one()
-
-    async def get_all(self):
-        stmt = select(self.model)
-        res = await self.session.execute(stmt)
-        return res.scalars().all()
-
-    async def get_one(self, pk: int):
-        stmt = select(self.model).where(self.model.id == pk)
-        res = await self.session.execute(stmt)
-        return res.scalar_one_or_none()
-
-    async def get_one_by(self, **kwargs):
-        stmt = select(self.model)
-        for field, value in kwargs.items():
-            column = getattr(self.model, field)
-            stmt = stmt.where(column == value)
-        res = await self.session.execute(stmt)
-        return res.scalar_one_or_none()
-
-    async def update(self, pk: int, data: dict):
-        stmt = (update(self.model)
-                .where(self.model.id == pk)
-                .values(**data)
-                .returning(self.model))
-        res = await self.session.execute(stmt)
-        return res.scalar_one_or_none()
-
-    async def delete(self, pk: int):
-        stmt = delete(self.model).where(self.model.id == pk)
-        await self.session.execute(stmt)
-        return True
-
 
 class UserRepository(Repository):
     model = User
@@ -194,47 +124,3 @@ class UserRepository(Repository):
 
             await self.session.execute(stmt)
         return (token is not None)
-
-
-class ChatParticipantRepository(Repository):
-    model = ChatParticipant
-
-
-class ChatRepository(Repository):
-    model = Chat
-
-    async def get_all_for_user(self, user_id: int):
-        stmt = (
-            select(self.model)
-            .join(ChatParticipant, self.model.id == ChatParticipant.chat_id)
-            .where(ChatParticipant.user_id == user_id)
-        )
-        res = await self.session.execute(stmt)
-        return res.scalars().all()
-
-    async def get_one_for_user(self, chat_id: int, user_id: int):
-        stmt = (
-            select(self.model)
-            .join(ChatParticipant, self.model.id == ChatParticipant.chat_id)
-            .where(and_(ChatParticipant.user_id == user_id, ChatParticipant.chat_id == chat_id))
-        )
-        res = await self.session.execute(stmt)
-        return res.scalars().one_or_none()
-
-
-
-class MessageRepository(Repository):
-    model = Message
-
-    async def get_all_for_chat(self, chat_id: int):
-        stmt = (
-            select(self.model)
-            .where(self.model.chat_id == chat_id)
-        )
-        res = await self.session.execute(stmt)
-        return res.scalars().all()
-
-
-
-class PrivateChatRepository(Repository):
-    model = PrivateChat

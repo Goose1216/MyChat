@@ -2,7 +2,7 @@ import json
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, HTTPException
 from typing import Dict, Set
 
-from app.services.services import ChatService, MessageService
+from app.services import ChatService, MessageService
 from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
                                    ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork

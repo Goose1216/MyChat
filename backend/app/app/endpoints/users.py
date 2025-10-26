@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Dict
 
-from app.services.services import UserService
+from app.services import UserService
 from app.app.schemas.users import UserSchemaRegister, UserSchemaLogin
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork
 from app.security import security

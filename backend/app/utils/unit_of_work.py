@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.repositories.repositories import UserRepository, ChatRepository, ChatParticipantRepository, MessageRepository, PrivateChatRepository
+from app.repositories import UserRepository, ChatRepository, ChatParticipantRepository, MessageRepository, PrivateChatRepository
 from app.db.database import async_session_maker
 
 
