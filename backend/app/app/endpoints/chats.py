@@ -101,12 +101,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 await manager.broadcast(message=text, chat_id=chat_id, sender_id=user_id, receivers_id=members_chat)
 
-            except (ValueError, KeyError):
-                await websocket.send_json({"error": "Invalid message format"})
             except Exception as e:
-                #await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
                 #return
-                await websocket.send_json({"error": f"Server error: {str(e)}"})
+                #await websocket.send_json({"error": f"Server error: {str(e)}"})
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
@@ -117,6 +115,18 @@ async def get_all_chat_for_user(access_token = Depends(security.decode_jwt), uow
         user_id = access_token.get("user_id")
         chat_service = ChatService(uow)
         return await chat_service.get_all_for_user(user_id)
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
+
+@chats.get("/{chat_id}/messages")
+async def get_all_messages_for_chat(
+                                    chat_id: int,
+                                    access_token = Depends(security.decode_jwt),
+                                    uow: IUnitOfWork = Depends(get_unit_of_work)
+):
+    if access_token.get('type') == 'access':
+        chat_service = ChatService(uow)
+        return await chat_service.get_all_message_for_chat(chat_id=chat_id)
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
 

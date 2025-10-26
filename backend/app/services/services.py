@@ -157,6 +157,13 @@ class ChatService:
             chats_for_return = [ChatSchemaFromBd.model_validate(chat) for chat in chats]
             return chats_for_return
 
+    async def get_all_message_for_chat(self, *, chat_id: int):
+        async with self.uow as uow:
+            messages = await uow.message.get_all_for_chat(chat_id=chat_id)
+
+            messages_for_return = [MessageFromDbSchema.model_validate(message) for message in messages]
+            return messages_for_return
+
     async def get_members(self, chat_id: int, *, return_id: bool = False):
         async with self.uow as uow:
             users = await uow.user.get_all_members_for_chat(chat_id=chat_id)
@@ -187,4 +194,7 @@ class MessageService:
             await uow.commit()
 
             return message_for_return
+
+
+
 

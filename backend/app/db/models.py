@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum
+from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME
 from datetime import datetime
 from typing import Optional, List
 import enum
@@ -83,6 +83,7 @@ class Message(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False)
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages')
