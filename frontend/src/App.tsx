@@ -3,6 +3,7 @@ import LoginScreen from "./components/LoginScreen";
 import ChatsListScreen from "./components/ChatsListScreen";
 import ChatScreen from "./components/ChatScreen";
 import type { Chat } from "./types";
+import { WebSocketProvider } from "./Websocket.tsx";
 
 export default function App() {
   const [token, setToken] = useState<string | null>(localStorage.getItem("access_token"));
@@ -70,20 +71,22 @@ const handleLogin = (accessToken: string, id: number, refreshToken?: string) => 
     setView("chats");
   };
 
-  if (view === "login") return <LoginScreen onLogin={handleLogin} />;
+  if (view === "login") return  <WebSocketProvider><LoginScreen onLogin={handleLogin} /> </WebSocketProvider>;
 
   if (view === "chats" && token && userId !== null)
     return (
+       <WebSocketProvider>
       <ChatsListScreen
         access_token={token}
         userId={userId}
         onSelectChat={openChat}
         onLogout={handleLogout}
       />
+          </WebSocketProvider>
     );
 
   if (view === "chat" && token && userId !== null && selectedChat)
-    return <ChatScreen token={token} userId={userId} chat={selectedChat} onBack={backToChats} />;
+    return  <WebSocketProvider> <ChatScreen token={token} userId={userId} chat={selectedChat} onBack={backToChats} />  </WebSocketProvider>;
 
   return null;
 }

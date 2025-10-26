@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
-import type { Chat, Message } from "../types";
+import { useWebSocket } from "../Websocket.tsx";
 import { fetchWithAuth } from "../api";
+import type { Chat, Message } from "../types";
 
 export default function ChatScreen({
   userId,
@@ -13,105 +14,53 @@ export default function ChatScreen({
 }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState("");
-  const wsRef = useRef<WebSocket | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
-
+  const { sendMessage, addHandler, removeHandler, connected } = useWebSocket();
   const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
 
-  // 🧠 динамически берём токен из localStorage при каждом подключении
-  const getToken = () => localStorage.getItem("access_token");
-
-  // Создание WebSocket с актуальным токеном
-  const createWsUrl = () => {
-    const token = getToken();
-    return API.replace(/^http/, "ws") + `/chats/ws?token=${token}`;
-  };
-
-  // Загрузка истории сообщений
-  const loadHistory = async () => {
-    try {
-      const res = await fetchWithAuth(`${API}/chats/${chat.id}/messages`, {
-        method: "GET",
-      });
-      if (!res.ok) throw new Error(`Ошибка при загрузке истории: ${res.status}`);
-
-      const data = await res.json();
-
-      setMessages(
-        data.map((m: any) => ({
-          id: m.id,
-          text: m.content,
-          sender_id: m.sender_id,
-          chat_id: m.chat_id,
-          is_self: m.sender_id === userId,
-          timestamp: m.created_at || new Date().toISOString(),
-        }))
-      );
-    } catch (err) {
-      console.error("Ошибка загрузки истории:", err);
-    }
-  };
-
-  // Подключение к WebSocket
   useEffect(() => {
-    let stop = false;
-    let reconnectTimer: any;
-
-    const connect = () => {
-      const wsUrl = createWsUrl();
-      console.log("Подключение к WebSocket:", wsUrl);
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        console.log("✅ WebSocket подключён");
-      };
-
-      ws.onclose = () => {
-        console.warn("⚠️ WebSocket закрыт, переподключение...");
-        if (!stop) reconnectTimer = setTimeout(connect, 2500);
-      };
-
-      ws.onerror = (err) => console.error("Ошибка WebSocket:", err);
-
-      ws.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-
-          if (data.text && data.chat_id === chat.id) {
-            setMessages((prev) => [
-              ...prev,
-              {
-                id: Date.now() + Math.random(),
-                text: data.text,
-                sender_id: data.sender_id,
-                chat_id: data.chat_id,
-                is_self: data.sender_id === userId,
-                timestamp: new Date().toISOString(),
-              },
-            ]);
-          } else if (data.error) {
-            console.error("Ошибка WS:", data.error);
-          }
-        } catch (err) {
-          console.error("Ошибка парсинга WS:", err);
-        }
-      };
+    const loadHistory = async () => {
+      try {
+        const res = await fetchWithAuth(`${API}/chats/${chat.id}/messages`);
+        const data = await res.json();
+        setMessages(
+          data.map((m: any) => ({
+            id: m.id,
+            text: m.content,
+            sender_id: m.sender_id,
+            chat_id: m.chat_id,
+            is_self: m.sender_id === userId,
+            timestamp: m.created_at || new Date().toISOString(),
+          }))
+        );
+      } catch (err) {
+        console.error("Ошибка загрузки истории:", err);
+      }
     };
 
-    connect();
-
-    return () => {
-      stop = true;
-      wsRef.current?.close();
-      clearTimeout(reconnectTimer);
-    };
-  }, [chat.id]); // ⚠️ не зависим от token
-
-  // Загрузка истории один раз при монтировании
-  useEffect(() => {
     loadHistory();
   }, [chat.id]);
+
+  useEffect(() => {
+    const handler = (data: any) => {
+      if (data.chat_id === chat.id && data.text) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: Date.now() + Math.random(),
+            text: data.text,
+            sender_id: data.sender_id,
+            chat_id: data.chat_id,
+            is_self: data.sender_id === userId,
+            timestamp: new Date().toISOString(),
+          },
+        ]);
+      }
+    };
+
+    addHandler(handler);
+    return () => removeHandler(handler);
+  }, [chat.id, addHandler, removeHandler]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -120,9 +69,8 @@ export default function ChatScreen({
   const send = (e?: React.FormEvent) => {
     e?.preventDefault();
     const text = newMessage.trim();
-    if (!text || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return;
-
-    wsRef.current.send(JSON.stringify({ chat_id: chat.id, text }));
+    if (!text || !connected) return;
+    sendMessage({ chat_id: chat.id, text });
     setNewMessage("");
   };
 
@@ -160,7 +108,6 @@ export default function ChatScreen({
               </div>
             </div>
           ))}
-
           <div ref={bottomRef} />
         </div>
       </main>
@@ -175,7 +122,9 @@ export default function ChatScreen({
           />
           <button
             type="submit"
-            className="bg-blue-600 text-white px-4 py-2 rounded"
+            className={`px-4 py-2 rounded text-white ${
+              connected ? "bg-blue-600" : "bg-gray-400"
+            }`}
           >
             {">"}
           </button>
