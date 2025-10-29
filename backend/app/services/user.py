@@ -54,7 +54,8 @@ class UserService:
     async def get_by_email_or_username(self, username_or_email: str):
          async with self.uow as uow:
             res = await uow.user.get_by_email_or_username(username_or_email)
-            return res
+            user_for_return = UserSchemaFromBd.model_validate(res) if res is not None else None
+            return user_for_return
 
     async def create_jwt_tokens(self, username_or_email: str, user_id: int | None = None, session_id: str | None = None):
         async with self.uow as uow:

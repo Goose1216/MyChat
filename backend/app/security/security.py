@@ -9,12 +9,13 @@ from fastapi import Depends, HTTPException, status
 from app.core.config import settings
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/users/login')
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/users/login/swagger/')
 
 SECRET_KEY = settings.SECRET_KEY
 ALGORITHM = 'HS256'
 ACCESS_TOKEN_EXPIRE_MINUTES = 30
-REFRESH_TOKEN_EXPIRE_DAYS = 7 
+REFRESH_TOKEN_EXPIRE_DAYS = 7
+access_TOKEN_EXPIRE_DAYS_FOR_SWAGGER = 1
 
 def verify_hash(plain_str, hashed_str):
     return pwd_context.verify(plain_str, hashed_str)
@@ -22,13 +23,29 @@ def verify_hash(plain_str, hashed_str):
 def get_string_hash(string_for_hash):
     return pwd_context.hash(string_for_hash)
 
+def create_jwt_for_swagger(data: Dict):
+    try:
+        to_encode_access = data.copy()
+
+        expire_access = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=access_TOKEN_EXPIRE_DAYS_FOR_SWAGGER)
+        to_encode_access.update({"exp": expire_access, "type": "access"})
+        access_token = jwt.encode(to_encode_access, SECRET_KEY, algorithm=ALGORITHM)
+
+        return {
+                  "access_token": access_token,
+                  "token_type": "bearer"
+                }
+
+    except jwt.PyJWTError as e:
+        # здесь можно добавить логирование
+        print(e)
+        return None
+
 def create_jwt_tokens(data: Dict):
     try:
         to_encode_access = data.copy()
 
         expire_access = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-        expire_access = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(
-            seconds=10)
         to_encode_access.update({"exp": expire_access, "type": "access"})
         access_token = jwt.encode(to_encode_access, SECRET_KEY, algorithm=ALGORITHM)
 

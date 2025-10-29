@@ -1,12 +1,13 @@
 from fastapi import HTTPException, status
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy import select, desc
 
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
 from app.app.schemas.chats import (ChatCreateSchema, ChatParticipantSchema, MessageSchema,
                                    ChatSchemaFromBd, ChatPrivateCreateSchema, ChatParticipantSchemaForAddUser)
 from app.app.schemas.message import MessageFromDbSchema
-from app.db.models import ChatType
+from app.db.models import ChatType, Message, Chat, ChatParticipant
 
 
 class ChatService:
@@ -92,6 +93,25 @@ class ChatService:
             chats = await uow.chat.get_all_for_user(user_id)
             chats_for_return = [ChatSchemaFromBd.model_validate(chat) for chat in chats]
             return chats_for_return
+
+    async def get_all_for_user_with_last_message(self, user_id: int):
+        stmt = (
+            select(Chat, Message)
+            .join(Chat.participants)
+            .outerjoin(Message, Message.chat_id == Chat.id)
+            .where(ChatParticipant.user_id == user_id)
+            .order_by(Chat.id, desc(Message.created_at))
+        )
+        res = await self.session.execute(stmt)
+        chats = {}
+        for chat, message in res.all():
+            if chat.id not in chats:
+                chat_schema = ChatSchemaFromBd.model_validate(chat)
+                chat_schema.last_message = (
+                    MessageFromDbSchema.model_validate(message) if message else None
+                )
+                chats[chat.id] = chat_schema
+        return list(chats.values())
 
     async def get_all_message_for_chat(self, *, chat_id: int):
         async with self.uow as uow:

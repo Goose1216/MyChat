@@ -118,6 +118,18 @@ async def get_all_chat_for_user(access_token = Depends(security.decode_jwt), uow
     else:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
 
+@chats.get("/{chat_id}/members")
+async def get_all_members_for_chat(
+                                    chat_id: int,
+                                    access_token = Depends(security.decode_jwt),
+                                    uow: IUnitOfWork = Depends(get_unit_of_work)
+):
+    if access_token.get('type') == 'access':
+        chat_service = ChatService(uow)
+        return await chat_service.get_members(chat_id=chat_id)
+    else:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not correct type token")
+
 @chats.get("/{chat_id}/messages")
 async def get_all_messages_for_chat(
                                     chat_id: int,

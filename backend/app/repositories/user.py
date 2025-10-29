@@ -28,14 +28,7 @@ class UserRepository(Repository):
             )
         res = await self.session.execute(stmt)
         user = res.scalar_one_or_none()
-        if user:
-            return {
-                'user_id': user.id,
-                'email': user.email,
-                'username': user.username,
-                'phone': user.phone,
-            }
-        return None
+        return user
 
     async def get_all_members_for_chat(self, chat_id: int):
         stmt = (

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Form
 from typing import Dict
 
 from app.services import UserService
@@ -28,6 +28,23 @@ async def get_user(access_token = Depends(security.decode_jwt), uow: IUnitOfWork
 async def add_user(user_data: UserSchemaRegister, uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)
     return await user_service.register(user_data)
+
+@users.post("/login/swagger/")
+async def login_user(username: str = Form(...), password: str = Form(...), uow: IUnitOfWork = Depends(get_unit_of_work)):
+    user_service = UserService(uow)
+
+    if await user_service.check_credentials(input_password=password, username_or_email=username):
+
+        user = await user_service.get_by_email_or_username(username_or_email=username)
+        user_id = user.id
+
+        data = {"user_id": user_id, "username_or_email": username}
+        return security.create_jwt_for_swagger(data)
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid data"
+        )
 
 @users.post("/login")
 async def login_user(user_data: UserSchemaLogin, uow: IUnitOfWork = Depends(get_unit_of_work)):

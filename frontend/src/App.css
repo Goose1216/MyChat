@@ -1,10 +1,21 @@
-#root {
-  max-width: 1280px;
-  margin: 0 auto;
-  padding: 2rem;
-  text-align: center;
+/* --- FIX GLOBAL CONTAINER LAYOUT --- */
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
+/* --- REMOVE OLD VITE TEMPLATE STYLES --- */
+#root {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  background-color: #f9fafb; /* мягкий фон по умолчанию */
+}
+
+/* --- OPTIONAL: LOGO ANIMATIONS (если ты всё ещё их используешь) --- */
 .logo {
   height: 6em;
   padding: 1.5em;
@@ -33,6 +44,7 @@
   }
 }
 
+/* --- REMOVE OLD TEMPLATE CLASSES --- */
 .card {
   padding: 2em;
 }
