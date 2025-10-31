@@ -27,17 +27,20 @@ class ConnectionManager:
             if not self.active_connections[user_id]:
                 del self.active_connections[user_id]
 
-    async def broadcast(self, message: str, chat_id: int, sender_id: int, receivers_id: list[int]):
+    async def broadcast(self, message: str, chat_id: int, sender_id: int, receivers_id: list[int], **kwargs):
         for receiver_id in receivers_id:
             if receiver_id in self.active_connections:
                 for connection in list(self.active_connections[receiver_id]):
                     try:
-                        await connection.send_json({
+                        for_send_json = {
                             "text": message,
                             "chat_id": chat_id,
                             "sender_id": sender_id,
-                            "it_self": receiver_id == sender_id
-                        })
+                            "it_self": receiver_id == sender_id,
+                        }
+                        for_send_json.update(**kwargs)
+
+                        await connection.send_json(for_send_json)
                     except Exception:
                         self.active_connections[receiver_id].discard(connection)
                         if not self.active_connections[receiver_id]:
@@ -95,11 +98,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 chat_id = int(message_data.get("chat_id"))
                 text = message_data.get("text", "").strip()
 
-                await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
+                message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
 
                 members_chat = await chat_service.get_members(chat_id, return_id=True)
 
-                await manager.broadcast(message=text, chat_id=chat_id, sender_id=user_id, receivers_id=members_chat)
+                await manager.broadcast(
+                    message=text,
+                    chat_id=chat_id,
+                    sender_id=user_id,
+                    receivers_id=members_chat,
+                    created_at=message.created_at.isoformat(),
+                )
 
             except Exception as e:
                 await websocket.close(code=status.WS_1008_POLICY_VIOLATION)

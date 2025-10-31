@@ -52,7 +52,7 @@ export default function ChatScreen({
             sender_id: m.sender_id,
             chat_id: m.chat_id,
             is_self: m.sender_id === userId,
-            timestamp: m.created_at || new Date().toISOString(),
+            timestamp: m.created_at ,
           }))
         );
       } catch (err) {
@@ -72,7 +72,7 @@ export default function ChatScreen({
         setMessages((prev) => [
           ...prev,
           {
-            id: Date.now() + Math.random(),
+            id: data.id ?? Date.now() + Math.random(),
             text: data.text,
             sender_id: data.sender_id,
             chat_id: data.chat_id,
