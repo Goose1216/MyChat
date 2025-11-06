@@ -15,3 +15,5 @@ app.add_middleware(
 
 app.include_router(users)
 app.include_router(chats)
+
+from app import errors

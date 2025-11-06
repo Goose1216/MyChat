@@ -1,68 +1,74 @@
 import React, { useState } from "react";
-import { login } from "../api";
 
 export default function LoginScreen({
   onLogin,
 }: {
-  onLogin: (token: string, userId: number) => void;
+  onLogin: (token: string, userId: number, refreshToken: string) => void;
 }) {
   const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const handleSubmit = async (e: React.FormEvent) => {
-  e.preventDefault();
-  setError("");
-  try {
-    const res = await fetch(
-      `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/users/login`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          username_or_email: loginValue,
-          password: password,
-        }),
-      }
-    );
+    e.preventDefault();
+    setError("");
 
-    if (!res.ok) {
-      if (res.status === 401) {
-        setError("Неверный логин или пароль");
-      } else if (res.status === 500) {
-        setError("Ошибка на стороне сервера. Попробуйте позже");
-      } else {
-        const data = await res.json().catch(() => null);
-        setError(data?.detail || `Ошибка: ${res.status}`);
+    try {
+      const res = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/users/login/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            username_or_email: loginValue,
+            password: password,
+          }),
+        }
+      );
+
+      const json = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        setError(json?.errors?.[0]?.message || "Ошибка авторизации");
+        return;
       }
-      return;
+
+      const accessToken = json.data.access_token;
+      const refreshToken = json.data.refresh_token;
+
+      if (!accessToken) {
+        setError("Ответ не содержит access_token");
+        return;
+      }
+
+      localStorage.setItem("access_token", accessToken);
+      localStorage.setItem("refresh_token", refreshToken);
+
+      const meRes = await fetch(
+        `${import.meta.env.VITE_API_URL || "http://127.0.0.1:8000"}/users/me/`,
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+
+      const meJson = await meRes.json().catch(() => null);
+
+      if (!meRes.ok) {
+        setError(meJson?.errors?.[0]?.message || "Ошибка загрузки профиля");
+        return;
+      }
+
+      const userId = meJson.data.id;
+
+      if (!userId) {
+        setError("В ответе от /users/me/ нет user_id");
+        return;
+      }
+
+      onLogin(accessToken, Number(userId), refreshToken);
+    } catch (err) {
+      console.error("Login error:", err);
+      setError("Не удалось выполнить вход. Проверьте подключение к серверу.");
     }
-
-    const tokens = await res.json();
-    const accessToken = tokens.access_token;
-    const refresh_token = tokens.refresh_token;
-    if (!accessToken) throw new Error("No access token in response");
-
-    localStorage.setItem("access_token", accessToken);
-    localStorage.setItem("refresh_token", refresh_token);
-
-    const meRes = await fetch(
-      `${(import.meta.env.VITE_API_URL || "http://127.0.0.1:8000")}/users/me`,
-      { headers: { Authorization: `Bearer ${accessToken}` } }
-    );
-    if (!meRes.ok) throw new Error("Login succeeded but cannot get /users/me");
-
-    const me = await meRes.json();
-    const userId = me.id ?? me.user_id ?? me.userId;
-    if (!userId) throw new Error("No user id in /users/me response");
-
-    onLogin(accessToken, Number(userId));
-  } catch (err) {
-    console.error("Login error:", err);
-    setError("Не удалось выполнить вход. Проверьте подключение к серверу.");
-  }
-};
-
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
@@ -105,10 +111,6 @@ export default function LoginScreen({
         >
           Войти
         </button>
-
-        <p className="text-gray-500 text-sm text-center mt-4">
-          Добро пожаловать 👋
-        </p>
       </form>
     </div>
   );

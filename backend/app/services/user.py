@@ -4,6 +4,7 @@ from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
 from app.security import security
 from app.db.models import ChatType, UserRole
+from app.exceptions import InaccessibleEntity, UnfoundEntity, DuplicateEntity
 
 
 class UserService:
@@ -19,17 +20,21 @@ class UserService:
     async def register(self, user: UserSchemaRegister):
         existing_user = await self.check_user_exists(user)
         if existing_user:
-            if existing_user.email == user.email:
-                raise HTTPException(status_code=409, detail="User with this email already exists")
-            elif existing_user.username == user.username:
-                raise HTTPException(status_code=409, detail="User with this username already exists")
-            elif existing_user.phone == user.phone:
-                raise HTTPException(status_code=409, detail="User with this phone already exists")
+            if existing_user.email == user.email and user.email is not None:
+                raise DuplicateEntity(detail="Пользователь с таким емейлом уже существует")
+            elif existing_user.username == user.username and user.username is not None:
+                raise DuplicateEntity(detail="Пользователь с таким логином уже существует")
+            elif existing_user.phone == user.phone and user.phone is not None:
+                raise DuplicateEntity(detail="Пользователь с таким номером телефона уже существует")
 
         user_data = user.model_dump()
         async with self.uow as uow:
             password = user_data['password']
+            password = security.validate_password(password)
             user_data['password'] = security.get_string_hash(password)
+
+            user_data['phone'] = security.validate_phone(user_data['phone'])
+            user_data['username'] = security.validate_username(user_data['username'])
 
             user_from_db = await uow.user.add_one(user_data)
             user_for_return = UserSchemaFromBd.model_validate(user_from_db)
