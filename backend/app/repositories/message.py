@@ -10,6 +10,7 @@ class MessageRepository(Repository):
         stmt = (
             select(self.model)
             .where(self.model.chat_id == chat_id)
+            .order_by(self.model.created_at)
         )
         res = await self.session.execute(stmt)
         return res.scalars().all()

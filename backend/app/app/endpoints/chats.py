@@ -64,9 +64,7 @@ async def websocket_endpoint(websocket: WebSocket):
                 text = message_data.get("text", "").strip()
 
                 message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
-                print(message)
                 members_chat = await chat_service.get_members(chat_id, return_id=True)
-                print(members_chat)
                 await manager.broadcast(
                     message=text,
                     chat_id=chat_id,

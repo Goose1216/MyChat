@@ -163,7 +163,6 @@ class ChatService:
         chat = await self.get_one_by(id=chat_id)
         if not chat:
             raise UnfoundEntity(detail="Чат не найден")
-
         async with self.uow as uow:
             users = await uow.user.get_all_members_for_chat(chat_id=chat_id)
 
