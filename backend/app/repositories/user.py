@@ -8,6 +8,13 @@ from app.security import security
 class UserRepository(Repository):
     model = User
 
+    async def get_all(self, exception_id: int | None = None):
+        stmt = select(self.model)
+        if exception_id:
+            stmt = stmt.where(self.model.id != exception_id)
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
+
     async def check_user_exists(self, email: str, username: str, phone: str | None):
         stmt = select(User).where(
             or_(

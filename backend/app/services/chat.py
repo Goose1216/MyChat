@@ -19,8 +19,6 @@ class ChatService:
         user_id = chat_create_data.pop("user_id")
 
         async with self.uow as uow:
-
-
             chat_created = await uow.chat.add_one(chat_create_data)
             chat_for_return = ChatSchemaFromBd.model_validate(chat_created)
             chat_id = chat_for_return.id
@@ -36,6 +34,16 @@ class ChatService:
                     raise UnprocessableEntity(
                         detail="Не указан второй пользователь"
                     )
+
+                chat_participant = uow.chat_private.get_by(
+                    user1_id=min(user_id, user2_id),
+                    user2_id=max(user_id, user2_id)
+                )
+                if chat_participant is not None:
+                    raise DuplicateEntity(
+                        detail="Такой чат уже есть"
+                    )
+
                 # Используем min и max для легкости поиска этого чата в будущем, т.к. user1_id < user2_id
                 data_for_create_private_chat = {
                     "chat_id": chat_id,

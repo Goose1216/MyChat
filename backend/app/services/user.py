@@ -1,5 +1,3 @@
-from fastapi import HTTPException
-
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
 from app.security import security
@@ -10,6 +8,12 @@ from app.exceptions import InaccessibleEntity, UnfoundEntity, DuplicateEntity
 class UserService:
     def __init__(self, uow: IUnitOfWork):
         self.uow = uow
+
+    async def get_all(self, exception_id: int | None = None):
+        async with self.uow as uow:
+            users_from_db = await uow.user.get_all(exception_id=exception_id)
+            users_for_return = [UserSchemaFromBd.model_validate(user_from_db) for user_from_db in users_from_db]
+            return users_for_return
 
     async def get_by_id(self, user_id: int):
         async with self.uow as uow:

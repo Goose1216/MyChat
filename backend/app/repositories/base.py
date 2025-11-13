@@ -16,7 +16,12 @@ class AbstractRepository(ABC):
     async def get_one(self, pk: int):
         raise NotImplemented
 
+    @abstractmethod
     async def get_one_by(self, **kwargs):
+        raise NotImplemented
+
+    @abstractmethod
+    async def get_by(self, **kwargs):
         raise NotImplemented
 
     @abstractmethod
@@ -56,6 +61,14 @@ class Repository(ABC):
             stmt = stmt.where(column == value)
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
+
+    async def get_by(self, **kwargs):
+        stmt = select(self.model)
+        for field, value in kwargs.items():
+            column = getattr(self.model, field)
+            stmt = stmt.where(column == value)
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
 
     async def update(self, pk: int, data: dict):
         stmt = (update(self.model)
