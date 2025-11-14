@@ -50,7 +50,7 @@ class Repository(ABC):
         return res.scalars().all()
 
     async def get_one(self, pk: int):
-        stmt = select(self.model).where(self.model.id == pk)
+        stmt = select(self.model).filter(self.model.id == pk)
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
 
@@ -58,7 +58,7 @@ class Repository(ABC):
         stmt = select(self.model)
         for field, value in kwargs.items():
             column = getattr(self.model, field)
-            stmt = stmt.where(column == value)
+            stmt = stmt.filter(column == value)
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
 
@@ -66,7 +66,7 @@ class Repository(ABC):
         stmt = select(self.model)
         for field, value in kwargs.items():
             column = getattr(self.model, field)
-            stmt = stmt.where(column == value)
+            stmt = stmt.filter(column == value)
         res = await self.session.execute(stmt)
         return res.scalars().all()
 

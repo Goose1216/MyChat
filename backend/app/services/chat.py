@@ -1,4 +1,5 @@
 from fastapi import HTTPException, status
+import logging
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy import select, desc
 
@@ -9,6 +10,8 @@ from app.app.schemas.chats import (ChatCreateSchema, ChatParticipantSchema, Mess
 from app.app.schemas.message import MessageFromDbSchema
 from app.db.models import ChatType, Message, Chat, ChatParticipant
 from app.exceptions import NotAuthenticated, InaccessibleEntity, UnprocessableEntity, EntityError, DuplicateEntity, UnfoundEntity
+
+logger = logging.getLogger(__name__)
 
 class ChatService:
     def __init__(self, uow: IUnitOfWork):
@@ -35,7 +38,7 @@ class ChatService:
                         detail="Не указан второй пользователь"
                     )
 
-                chat_participant = uow.chat_private.get_by(
+                chat_participant = await uow.chat_private.get_one_by(
                     user1_id=min(user_id, user2_id),
                     user2_id=max(user_id, user2_id)
                 )

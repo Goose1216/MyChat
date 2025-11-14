@@ -9,6 +9,8 @@ class Config(BaseSettings):
     DB_PORT: str
     SECRET_KEY: str
 
+    PROJECT_NAME: str
+
     @property
     def ASYNC_DATABASE_URL(self):
         return f'postgresql+asyncpg://{self.DB_USERNAME}:{self.DB_PASSWORD}@{self.DB_HOST}:{self.DB_PORT}/{self.DB_NAME}'

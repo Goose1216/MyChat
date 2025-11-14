@@ -32,6 +32,11 @@ class User(Base):
 
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='sender')
     chat_participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='user')
+    refresh_tokens: Mapped[List["RefreshTokens"]] = relationship(
+        "RefreshTokens",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
 
 
 class Chat(Base):
@@ -41,7 +46,7 @@ class Chat(Base):
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
 
-    participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat', lazy='selectin')
+    participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat', lazy='selectin', cascade="all, delete-orphan",)
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan", lazy='selectin')
 
     private_chat: Mapped[Optional["PrivateChat"]] = relationship('PrivateChat', uselist=False, back_populates='chat')
@@ -70,7 +75,12 @@ class PrivateChat(Base):
     user1_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
     user2_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
 
-    chat: Mapped["Chat"] = relationship('Chat', back_populates='private_chat')
+    chat: Mapped["Chat"] = relationship(
+        'Chat',
+        back_populates='private_chat',
+        cascade="all, delete-orphan",
+        single_parent=True
+    )
 
     __table_args__ = (
         UniqueConstraint('user1_id', 'user2_id', name='uq_privatechat_user_pair'),
@@ -99,4 +109,4 @@ class RefreshTokens(Base):
     session_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True,
                                             default=lambda: str(uuid.uuid4()))
 
-    user = relationship("User", backref="refresh_tokens")
+    user = relationship("User", back_populates="refresh_tokens")

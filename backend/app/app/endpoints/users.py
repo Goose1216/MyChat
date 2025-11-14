@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form
 from typing import Dict, List
+import logging
 
 from app.services import UserService
 from app.app.schemas.users import UserSchemaRegister, UserSchemaLogin
@@ -9,6 +10,8 @@ from app.app import schemas
 from app.utils.response import get_responses_description_by_codes
 from app.utils import get_unit_of_work
 from app.exceptions import NotAuthenticated, InaccessibleEntity, UnprocessableEntity, EntityError
+
+logger = logging.getLogger(__name__)
 
 users = APIRouter(
     tags=['Пользователи'],
@@ -74,7 +77,6 @@ async def login_user(
         uow: IUnitOfWork = Depends(get_unit_of_work)
 ):
     user_service = UserService(uow)
-
     if await user_service.check_credentials(input_password=user_data.password, username_or_email=user_data.username_or_email):
         tokens = await user_service.create_jwt_tokens(
             username_or_email = user_data.username_or_email

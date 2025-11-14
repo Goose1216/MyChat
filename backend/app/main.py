@@ -1,9 +1,21 @@
+import os
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+
 from app.app.endpoints.users import users
 from app.app.endpoints.chats import chats
+from app.core.config import settings
+from app.logs.config import setup_logging, logger
 
-app = FastAPI()
+ENV = os.getenv("ENVIRONMENT", "development")
+
+setup_logging(ENV)
+
+
+app = FastAPI(
+    title=settings.PROJECT_NAME,
+)
 
 app.add_middleware(
     CORSMiddleware,

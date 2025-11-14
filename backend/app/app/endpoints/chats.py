@@ -1,4 +1,5 @@
 import json
+import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, HTTPException
 from typing import Dict, Set, List
 
@@ -14,6 +15,7 @@ from app.utils.response import get_responses_description_by_codes
 from app.utils import manager, get_unit_of_work
 from app.exceptions import NotAuthenticated, EntityError
 
+logger = logging.getLogger(__name__)
 
 chats = APIRouter(
     tags=['Чаты'],
