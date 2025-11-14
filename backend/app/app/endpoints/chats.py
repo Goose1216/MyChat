@@ -128,7 +128,7 @@ async def get_all_messages_for_chat(
 
 @chats.post(
     "/add_user/",
-    response_model=schemas.Response[schemas.UserSchemaFromBd],
+    response_model=schemas.Response[None],
     name="Добавить пользователя в чат",
     description="Только для участников этого чата",
     responses=get_responses_description_by_codes([401, 403, 404])
@@ -140,8 +140,8 @@ async def add_user_in_chat(
                             ):
     chat_service = ChatService(uow)
     user_who_add = access_token.get("user_id")
-    user = await chat_service.add_user_in_chat(user_who_add, info_for_add_user)
-    return schemas.Response(data=user)
+    await chat_service.add_user_in_chat(user_who_add, info_for_add_user)
+    return schemas.Response(data=None)
 
 @chats.post(
     "/",

@@ -63,23 +63,23 @@ class ChatService:
 
     async def add_user_in_chat(self, user_who_add_id: int, info: ChatParticipantSchemaForAddUser):
         info_for_add = info.model_dump()
+        chat_id = info_for_add.get("chat_id")
+
+        user_in_chat = await self.check_user_in_chat(chat_id=chat_id, user_id=user_who_add_id)
+        if not user_in_chat:
+            raise InaccessibleEntity(detail="Доступ запрещен")
+
         async with self.uow as uow:
-            chat_id = info_for_add.get("chat_id")
-
-            user_in_chat = await self.check_user_in_chat(chat_id=chat_id, user_id=user_who_add_id)
-            if not user_in_chat:
-                raise InaccessibleEntity(detail="Доступ запрещен")
-
             await self._get_chat(chat_id, user_who_add_id, uow)
-        try:
-            chat_participant = await uow.chat_participant.add_one(info_for_add)
-            chat_participant_for_return = ChatParticipantSchema.model_validate(chat_participant)
-            await uow.commit()
-        except IntegrityError:
-            raise DuplicateEntity(
-                detail="Пользователь уже состоит в чате"
-            )
-        return chat_participant_for_return
+            try:
+                chat_participant = await uow.chat_participant.add_one(info_for_add)
+                chat_participant_for_return = ChatParticipantSchema.model_validate(chat_participant)
+                await uow.commit()
+            except IntegrityError:
+                raise DuplicateEntity(
+                    detail="Пользователь уже состоит в чате"
+                )
+            return chat_participant_for_return
 
     async def get_chat(self, chat_id: int, user_id: int):
         async with self.uow as uow:
