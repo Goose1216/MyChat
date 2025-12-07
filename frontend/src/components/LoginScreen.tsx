@@ -2,8 +2,10 @@ import React, { useState } from "react";
 
 export default function LoginScreen({
   onLogin,
+  onGoRegister,
 }: {
   onLogin: (token: string, userId: number, refreshToken: string) => void;
+  onGoRegister: () => void;
 }) {
   const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
@@ -107,9 +109,17 @@ export default function LoginScreen({
 
         <button
           type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2.5 rounded-lg font-semibold shadow transition-all"
+          className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2.5 rounded-lg font-semibold shadow transition-all mb-3"
         >
           Войти
+        </button>
+
+        <button
+          type="button"
+          onClick={onGoRegister}
+          className="w-full bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 p-2.5 rounded-lg font-semibold transition-all"
+        >
+          Создать аккаунт
         </button>
       </form>
     </div>
