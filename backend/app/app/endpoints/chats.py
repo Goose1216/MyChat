@@ -148,6 +148,22 @@ async def add_user_in_chat(
     return schemas.Response(data=None)
 
 @chats.post(
+    "/{chat_id}/me/delete/",
+    response_model=schemas.Response[None],
+    name="Выйти из чата",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def delete_me_from_chat(
+                            chat_id: int,
+                            access_token = Depends(security.decode_jwt_access),
+                            uow: IUnitOfWork = Depends(get_unit_of_work)
+                            ):
+    chat_service = ChatService(uow)
+    user_id = access_token.get("user_id")
+    await chat_service.delete_user_from_chat(user_id, chat_id)
+    return schemas.Response(data=None)
+
+@chats.post(
     "/",
     response_model=schemas.Response[schemas.ChatSchemaFromBd],
     name="Создать чат",

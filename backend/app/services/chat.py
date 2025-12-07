@@ -68,10 +68,6 @@ class ChatService:
         info_for_add = info.model_dump()
         chat_id = info_for_add.get("chat_id")
 
-        user_in_chat = await self.check_user_in_chat(chat_id=chat_id, user_id=user_who_add_id)
-        if not user_in_chat:
-            raise InaccessibleEntity(detail="Доступ запрещен")
-
         async with self.uow as uow:
             await self._get_chat(chat_id, user_who_add_id, uow)
             try:
@@ -83,6 +79,14 @@ class ChatService:
                     detail="Пользователь уже состоит в чате"
                 )
             return chat_participant_for_return
+
+    async def delete_user_from_chat(self, user_id: int, chat_id: int):
+        async with self.uow as uow:
+            await self._get_chat(chat_id, user_id, uow)
+            chat_participant = await uow.chat_participant.get_one_by(user_id=user_id, chat_id=chat_id)
+
+            await uow.chat_participant.delete(chat_participant.id)
+            await uow.commit()
 
     async def get_chat(self, chat_id: int, user_id: int):
         async with self.uow as uow:
