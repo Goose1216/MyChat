@@ -67,12 +67,14 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
                 members_chat = await chat_service.get_members(chat_id, return_id=True)
+                logger.info(schemas.UserSchemaFromBd.model_validate(message.sender))
                 await manager.broadcast(
                     message=text,
                     chat_id=chat_id,
                     sender_id=user_id,
                     receivers_id=members_chat,
                     created_at=message.created_at.isoformat(),
+                    sender=message.sender.model_dump(),
                 )
 
             except Exception as e:

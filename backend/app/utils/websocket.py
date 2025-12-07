@@ -1,5 +1,9 @@
+import logging
+
 from fastapi import WebSocket
 from typing import Dict, Set
+
+logger = logging.getLogger(__name__)
 
 class ConnectionManager:
     def __init__(self):
@@ -29,7 +33,7 @@ class ConnectionManager:
                             "it_self": receiver_id == sender_id,
                         }
                         for_send_json.update(**kwargs)
-                        print(for_send_json)
+                        logger.info(for_send_json)
 
                         await connection.send_json(for_send_json)
                     except Exception:
