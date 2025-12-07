@@ -155,3 +155,17 @@ async def update_user(
     user_service = UserService(uow)
     updated = await user_service.patch(user_id, payload)
     return schemas.Response(data=updated)
+
+@users.get(
+    "/{user_id}/",
+    response_model=schemas.Response[schemas.UserSchemaFromBd],
+    name="Получить пользователя",
+    responses=get_responses_description_by_codes([401, 403])
+)
+async def get_user_by_id(
+        user_id: int,
+        access_token = Depends(security.decode_jwt_access),
+        uow: IUnitOfWork = Depends(get_unit_of_work)):
+    user_service = UserService(uow)
+    user = await user_service.get_by_id(user_id)
+    return schemas.Response(data=user)

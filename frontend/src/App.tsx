@@ -31,13 +31,11 @@ export default function App() {
     return res.json();
   }
 
-  // Получаем userId если токен есть
   useEffect(() => {
     if (token && !userId) {
       (async () => {
         try {
           const data = await apiMe(token);
-
           if (data?.data?.id) {
             setUserId(data.data.id);
             localStorage.setItem("user_id", String(data.data.id));
@@ -54,19 +52,12 @@ export default function App() {
     }
   }, []);
 
-  // Авторизация
-  const handleLogin = (
-    accessToken: string,
-    id: number,
-    refreshToken?: string
-  ) => {
+  const handleLogin = (accessToken: string, id: number, refreshToken?: string) => {
     setToken(accessToken);
     setUserId(id);
-
     localStorage.setItem("access_token", accessToken);
     if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
     localStorage.setItem("user_id", String(id));
-
     setView("chats");
   };
 
@@ -79,9 +70,7 @@ export default function App() {
     setView("login");
   };
 
-  const handleRegistered = () => {
-    setView("login");
-  };
+  const handleRegistered = () => setView("login");
 
   const openChat = (chat: Chat) => {
     setSelectedChat(chat);
@@ -93,47 +82,36 @@ export default function App() {
     setView("chats");
   };
 
-  const goToProfile = () => {
+  // ---- Открыть свой профиль (зелёная кнопка) ----
+  const goToMyProfile = () => {
     setView("profile");
   };
 
-  const backFromProfile = () => {
-    setView("chats");
-  };
+  // ---- Назад из профиля ----
+  const backFromProfile = () => setView("chats");
 
   /* ===========================
-      РЕНДЕРИНГ ЭКРАНОВ
+      РЕНДЕР ЭКРАНОВ
   ============================ */
 
   if (view === "login")
     return (
       <WebSocketProvider>
-        <LoginScreen
-          onLogin={handleLogin}
-          onGoRegister={() => setView("register")}
-        />
+        <LoginScreen onLogin={handleLogin} onGoRegister={() => setView("register")} />
       </WebSocketProvider>
     );
 
   if (view === "register")
     return (
       <WebSocketProvider>
-        <RegistrationScreen
-          onRegistered={handleRegistered}
-          onGoLogin={() => setView("login")}
-        />
+        <RegistrationScreen onRegistered={handleRegistered} onGoLogin={() => setView("login")} />
       </WebSocketProvider>
     );
 
   if (view === "profile" && token && userId !== null)
     return (
       <WebSocketProvider>
-        <ProfileScreen
-          token={token}
-          userId={userId}
-          onBack={backFromProfile}
-          onLogout={handleLogout}
-        />
+        <ProfileScreen token={token} userId={userId} onBack={backFromProfile} onLogout={handleLogout} />
       </WebSocketProvider>
     );
 
@@ -145,7 +123,7 @@ export default function App() {
           userId={userId}
           onSelectChat={openChat}
           onLogout={handleLogout}
-          onOpenProfile={goToProfile}
+          onOpenProfile={goToMyProfile}
         />
       </WebSocketProvider>
     );
