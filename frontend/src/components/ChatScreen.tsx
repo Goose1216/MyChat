@@ -18,6 +18,11 @@ export default function ChatScreen({
   const [viewedUser, setViewedUser] = useState<any>(null);
   const [loadingUser, setLoadingUser] = useState(false);
   const [newMessage, setNewMessage] = useState("");
+  const [users, setUsers] = useState<any[]>([]);
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [selectedUserId, setSelectedUserId] = useState("");
+  const [addError, setAddError] = useState("");
+  const [loadingUsers, setLoadingUsers] = useState(false);
 
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const { sendMessage, addHandler, removeHandler, connected } = useWebSocket();
@@ -105,7 +110,7 @@ export default function ChatScreen({
     setNewMessage("");
   };
 
-  // ====== Открытие модалки чужого пользователя ======
+  // ====== Модалка чужого пользователя ======
   const openUserModal = async (id: number) => {
     setViewedUserId(id);
     setLoadingUser(true);
@@ -126,6 +131,82 @@ export default function ChatScreen({
     return d.toLocaleString([], { year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
   };
 
+  // ====== Добавление участников ======
+  const openAddModal = async () => {
+    setShowAddModal(true);
+    setAddError("");
+    setLoadingUsers(true);
+    try {
+      const res = await fetchWithAuth(`${API}/users/get_all_users/`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      setUsers(Array.isArray(data?.data) ? data.data : []);
+    } catch (err) {
+      console.error(err);
+      setAddError("Не удалось загрузить пользователей");
+    } finally {
+      setLoadingUsers(false);
+    }
+  };
+
+const loadMembers = async () => {
+  try {
+    const res = await fetchWithAuth(`${API}/chats/${chat.id}/members`);
+    const data = await res.json().catch(() => ({}));
+    setMembers(Array.isArray(data?.data) ? data.data : []);
+  } catch (err) {
+    console.error(err);
+    setMembers([]);
+  }
+};
+
+const handleAddUser = async () => {
+  if (!selectedUserId) {
+    setAddError("Выберите пользователя");
+    return;
+  }
+  setAddError("");
+
+  try {
+    const res = await fetchWithAuth(`${API}/chats/add_user/`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ chat_id: chat.id, user_id: Number(selectedUserId) }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (res.ok) {
+      await loadMembers(); // <-- Обновляем список участников
+      setShowAddModal(false);
+      setSelectedUserId("");
+      return;
+    }
+
+    let errorMessage = data?.description || data?.errors?.[0]?.message || data?.message || "Ошибка добавления";
+    setAddError(errorMessage);
+  } catch (err) {
+    console.error(err);
+    setAddError("Ошибка соединения");
+  }
+};
+
+
+  const leaveChat = async () => {
+    try {
+      const res = await fetchWithAuth(`${API}/chats/${chat.id}/me/delete/`, { method: "POST" });
+      const data = await res.json().catch(() => ({}));
+      if (res.ok) {
+        onBack();
+        return;
+      }
+      let msg = data?.description || data?.errors?.[0]?.message || data?.message || "Ошибка выхода";
+      alert(msg);
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка соединения");
+    }
+  };
+
   return (
     <div className="min-h-screen flex flex-col bg-gray-50">
       {/* HEADER */}
@@ -137,6 +218,8 @@ export default function ChatScreen({
             {connected ? "Онлайн" : "Оффлайн"}
           </div>
         </div>
+
+        {/* Участники + кнопки */}
         <div className="flex flex-wrap gap-2 mt-1 items-center">
           {members.map((u) => (
             <div key={u.id} className="flex items-center gap-2 bg-gray-100 hover:bg-gray-200 transition rounded-full px-3 py-1 text-sm text-gray-800 cursor-pointer"
@@ -147,6 +230,24 @@ export default function ChatScreen({
               <span>{safeName(u)}{u.id === userId && " (Вы)"}</span>
             </div>
           ))}
+
+          {/* Кнопки только для группового чата */}
+          {chat.chat_type !== "private" && (
+            <>
+              <button
+                onClick={openAddModal}
+                className="ml-2 text-sm bg-blue-600 text-white px-3 py-1.5 rounded-full hover:bg-blue-700 transition"
+              >
+                + Добавить
+              </button>
+              <button
+                onClick={leaveChat}
+                className="ml-2 text-sm bg-red-600 text-white px-3 py-1.5 rounded-full hover:bg-red-700 transition"
+              >
+                Выйти
+              </button>
+            </>
+          )}
         </div>
       </header>
 
@@ -196,7 +297,6 @@ export default function ChatScreen({
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-lg">
             <h2 className="text-xl font-semibold mb-4 text-gray-800 text-center">Профиль пользователя</h2>
-
             {loadingUser ? (
               <div className="text-gray-500 text-center py-4">Загрузка...</div>
             ) : viewedUser ? (
@@ -208,13 +308,40 @@ export default function ChatScreen({
             ) : (
               <div className="text-red-600 text-center">Не удалось загрузить данные</div>
             )}
-
             <button
               onClick={() => setViewedUserId(null)}
               className="mt-4 w-full bg-gray-200 hover:bg-gray-300 text-gray-800 py-2 rounded-lg font-semibold"
             >
               Закрыть
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ДОБАВЛЕНИЯ ПОЛЬЗОВАТЕЛЯ */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/30">
+          <div className="bg-white rounded-2xl shadow-lg p-6 w-full max-w-md space-y-4">
+            <h3 className="text-lg font-semibold text-gray-800 text-center">Добавить пользователя</h3>
+            {loadingUsers ? (
+              <div className="text-gray-500 text-center py-4">Загрузка списка пользователей...</div>
+            ) : (
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="w-full border border-gray-300 rounded-lg p-2.5 bg-gray-50 text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none"
+              >
+                <option value="">-- Выберите пользователя --</option>
+                {users.map((u) => (
+                  <option key={u.id} value={u.id}>{safeName(u)}</option>
+                ))}
+              </select>
+            )}
+            {addError && <div className="text-red-600 text-sm bg-red-50 border border-red-200 rounded-lg p-2">{addError}</div>}
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setShowAddModal(false)} className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800 transition">Отмена</button>
+              <button onClick={handleAddUser} className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition">Добавить</button>
+            </div>
           </div>
         </div>
       )}
