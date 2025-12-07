@@ -3,6 +3,7 @@ import LoginScreen from "./components/LoginScreen";
 import RegistrationScreen from "./components/RegistrationScreen";
 import ChatsListScreen from "./components/ChatsListScreen";
 import ChatScreen from "./components/ChatScreen";
+import ProfileScreen from "./components/ProfileScreen";
 import type { Chat } from "./types";
 import { WebSocketProvider } from "./Websocket.tsx";
 
@@ -16,9 +17,9 @@ export default function App() {
     return u ? parseInt(u) : null;
   });
 
-  const [view, setView] = useState<"login" | "register" | "chats" | "chat">(
-    token ? "chats" : "login"
-  );
+  const [view, setView] = useState<
+    "login" | "register" | "chats" | "chat" | "profile"
+  >(token ? "chats" : "login");
 
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
 
@@ -30,6 +31,7 @@ export default function App() {
     return res.json();
   }
 
+  // Получаем userId если токен есть
   useEffect(() => {
     if (token && !userId) {
       (async () => {
@@ -52,6 +54,7 @@ export default function App() {
     }
   }, []);
 
+  // Авторизация
   const handleLogin = (
     accessToken: string,
     id: number,
@@ -90,6 +93,18 @@ export default function App() {
     setView("chats");
   };
 
+  const goToProfile = () => {
+    setView("profile");
+  };
+
+  const backFromProfile = () => {
+    setView("chats");
+  };
+
+  /* ===========================
+      РЕНДЕРИНГ ЭКРАНОВ
+  ============================ */
+
   if (view === "login")
     return (
       <WebSocketProvider>
@@ -103,7 +118,22 @@ export default function App() {
   if (view === "register")
     return (
       <WebSocketProvider>
-        <RegistrationScreen onRegistered={handleRegistered} onGoLogin={() => setView("login")} />
+        <RegistrationScreen
+          onRegistered={handleRegistered}
+          onGoLogin={() => setView("login")}
+        />
+      </WebSocketProvider>
+    );
+
+  if (view === "profile" && token && userId !== null)
+    return (
+      <WebSocketProvider>
+        <ProfileScreen
+          token={token}
+          userId={userId}
+          onBack={backFromProfile}
+          onLogout={handleLogout}
+        />
       </WebSocketProvider>
     );
 
@@ -115,6 +145,7 @@ export default function App() {
           userId={userId}
           onSelectChat={openChat}
           onLogout={handleLogout}
+          onOpenProfile={goToProfile}
         />
       </WebSocketProvider>
     );

@@ -9,7 +9,7 @@ from app.security import security
 from app.app import schemas
 from app.utils.response import get_responses_description_by_codes
 from app.utils import get_unit_of_work
-from app.exceptions import NotAuthenticated, InaccessibleEntity, UnprocessableEntity, EntityError
+from app.exceptions import NotAuthenticated, InaccessibleEntity, UnprocessableEntity, EntityError, DuplicateEntity
 
 logger = logging.getLogger(__name__)
 
@@ -138,3 +138,20 @@ async def get_all_user(
     user_service = UserService(uow)
     return schemas.Response(data=await user_service.get_all(exception_id=access_token.get("user_id")))
 
+@users.patch(
+    "/me/",
+    response_model=schemas.Response[schemas.UserSchemaFromBd],
+    name="Обновить пользователя",
+    responses=get_responses_description_by_codes([401, 403, 404, 409])
+)
+async def update_user(
+        payload: schemas.UserSchemaPatch,
+        access_token=Depends(security.decode_jwt_access),
+        uow: IUnitOfWork = Depends(get_unit_of_work)
+):
+    #Добавить валидацию
+
+    user_id = access_token.get("user_id")
+    user_service = UserService(uow)
+    updated = await user_service.patch(user_id, payload)
+    return schemas.Response(data=updated)

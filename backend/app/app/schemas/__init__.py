@@ -18,6 +18,8 @@ UserSchemaLogin,
 UserSchemaFromBd,
 UserSchemaRegister,
 Tokens,
+UserSchemaPatch,
+UserChangePassword,
 )
 from .response import (
 Response,

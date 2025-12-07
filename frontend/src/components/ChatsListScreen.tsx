@@ -7,11 +7,13 @@ export default function ChatsListScreen({
   userId,
   onSelectChat,
   onLogout,
+  onOpenProfile,
 }: {
   access_token: string;
   userId: number;
   onSelectChat: (chat: any) => void;
   onLogout: () => void;
+  onOpenProfile: () => void;
 }) {
   const [chats, setChats] = useState<any[]>([]);
   const [showCreateChat, setShowCreateChat] = useState(false);
@@ -28,8 +30,6 @@ export default function ChatsListScreen({
 
       if (res.ok) {
         const responseData = await res.json();
-
-        // Берем массив чатов из responseData.data
         setChats(responseData.data ?? []);
       } else if (res.status === 401) {
         alert("Сессия истекла. Авторизуйтесь снова.");
@@ -63,12 +63,22 @@ export default function ChatsListScreen({
             Ваши чаты
           </h1>
           <div className="space-x-3">
+
+            {/* Кнопка профиля */}
+            <button
+              onClick={onOpenProfile}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow transition-all"
+            >
+              Профиль
+            </button>
+
             <button
               onClick={() => setShowCreateChat(true)}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow transition-all"
             >
               + Новый чат
             </button>
+
             <button
               onClick={onLogout}
               className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 shadow transition-all"
@@ -112,7 +122,6 @@ export default function ChatsListScreen({
         </div>
       </div>
 
-      {/* Модалка */}
       {showCreateChat && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">

@@ -1,7 +1,12 @@
+import logging
+
 from abc import ABC, abstractmethod
-from sqlalchemy import insert, select, update, delete
+from sqlalchemy import insert, select, update, delete, inspect
+from pydantic import BaseModel
+
 from app.db.database import AsyncSession
 
+logger = logging.getLogger(__name__)
 
 class AbstractRepository(ABC):
     @abstractmethod
@@ -70,10 +75,30 @@ class Repository(ABC):
         res = await self.session.execute(stmt)
         return res.scalars().all()
 
-    async def update(self, pk: int, data: dict):
+
+    async def _adapt_fields(
+            self, obj: str | BaseModel, **kwargs
+    ) -> dict:
+        "pydantic model to dict+kwargs"
+        data = (
+            obj.model_dump(exclude_unset=True, exclude_none=True)
+            if not isinstance(obj, dict)
+            else obj
+        )
+        data.update(**kwargs)
+        return data
+
+    async def update(self, pk: int, data: BaseModel):
+        fields_ = await self._adapt_fields(data)
+        fields = {}
+        info = inspect(self.model)
+        for field_ in info.columns.keys() + info.relationships.keys():
+            if field_ in fields_:
+                fields[field_] = fields_[field_]
+
         stmt = (update(self.model)
                 .where(self.model.id == pk)
-                .values(**data)
+                .values(**fields)
                 .returning(self.model))
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()

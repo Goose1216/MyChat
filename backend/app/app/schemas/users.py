@@ -17,6 +17,16 @@ class UserSchemaFromBd(BaseModel):
     phone: str
 
 
+class UserSchemaPatch(BaseModel):
+    username: str | None = None
+    email: str | None = None
+    phone: str | None = None
+
+
+class UserChangePassword(BaseModel):
+    new_password: str
+
+
 class UserSchemaLogin(BaseModel):
     username_or_email: str
     password: str

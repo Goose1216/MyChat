@@ -1,5 +1,5 @@
 from app.utils.unit_of_work import IUnitOfWork
-from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
+from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd, UserSchemaPatch
 from app.security import security
 from app.db.models import ChatType, UserRole
 from app.exceptions import InaccessibleEntity, UnfoundEntity, DuplicateEntity
@@ -43,6 +43,14 @@ class UserService:
             user_from_db = await uow.user.add_one(user_data)
             user_for_return = UserSchemaFromBd.model_validate(user_from_db)
             await uow.commit()
+            return user_for_return
+
+    async def patch(self, pk: int, data: UserSchemaPatch):
+        async with self.uow as uow:
+            user_from_db = await uow.user.update(pk, data)
+            user_for_return = UserSchemaFromBd.model_validate(user_from_db)
+            await uow.commit()
+
             return user_for_return
 
     async def check_user_exists(self, user_data: UserSchemaRegister):
