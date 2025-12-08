@@ -1,8 +1,6 @@
-from email.policy import default
 
 from app.utils.unit_of_work import IUnitOfWork
-from app.schemas import MessageUpdateSchema
-from app.app.schemas.message import MessageCreateSchema, MessageFromDbSchema
+from app.app.schemas.message import MessageCreateSchema, MessageFromDbSchema, MessageUpdateSchema
 from app.exceptions import InaccessibleEntity, UnfoundEntity
 
 class MessageService:
