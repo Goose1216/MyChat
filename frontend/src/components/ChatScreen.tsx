@@ -52,6 +52,7 @@ export default function ChatScreen({
             timestamp: m.created_at,
             sender: m.sender,
             is_self: m.sender_id === userId,
+            is_system: m.sender_id === null,
           }))
         );
       } catch (err) {
@@ -89,6 +90,7 @@ export default function ChatScreen({
           timestamp: msg.created_at,
           sender: msg.sender,
           is_self: msg.sender_id === userId,
+          is_system: msg.sender_id === null,
         },
       ]);
     };
@@ -253,29 +255,63 @@ const handleAddUser = async () => {
 
       {/* СООБЩЕНИЯ */}
       <main className="flex-1 p-4 max-w-4xl mx-auto w-full overflow-y-auto">
-        {messages.map((m) => (
-          <div key={m.id} className={`flex items-start gap-2 mb-3 ${m.is_self ? "justify-end" : "justify-start"}`}>
-            {!m.is_self && m.sender && (
-              <div className={`w-10 h-10 flex items-center justify-center rounded-full text-white font-bold shrink-0 ${avatarColor(m.sender.id)}`}>
-                {safeName(m.sender).charAt(0).toUpperCase()}
-              </div>
-            )}
-            <div className={`p-3 rounded-2xl max-w-[70%] text-sm shadow ${m.is_self ? "bg-blue-600 text-white rounded-br-none" : "bg-gray-100 text-gray-900 rounded-bl-none"}`}>
-              {!m.is_self && m.sender && (
-                <div className="text-xs font-semibold text-gray-700 mb-1 cursor-pointer"
-                     onClick={() => openUserModal(m.sender.id)}>
-                  {safeName(m.sender)}
-                </div>
-              )}
-              <div>{m.text}</div>
-              <div className="text-xs mt-1 opacity-50 text-right">
-                {formatDateTime(m.timestamp)}
-              </div>
-            </div>
+  {messages.map((m) =>
+    m.is_system ? (
+      // ⭐ СИСТЕМНОЕ СООБЩЕНИЕ (В ЦЕНТРЕ)
+      <div key={m.id} className="w-full text-center my-3">
+        <div className="text-gray-500 text-xs italic">
+          {m.text}
+        </div>
+        <div className="text-gray-400 text-[10px] mt-1">
+          {formatDateTime(m.timestamp)}
+        </div>
+      </div>
+    ) : (
+      // ⭐ ОБЫЧНОЕ СООБЩЕНИЕ (ТВОЙ ДИЗАЙН СОХРАНЁН)
+      <div
+        key={m.id}
+        className={`flex items-start gap-2 mb-3 ${
+          m.is_self ? "justify-end" : "justify-start"
+        }`}
+      >
+        {!m.is_self && m.sender && (
+          <div
+            className={`w-10 h-10 flex items-center justify-center rounded-full text-white font-bold shrink-0 ${avatarColor(
+              m.sender.id
+            )}`}
+          >
+            {safeName(m.sender).charAt(0).toUpperCase()}
           </div>
-        ))}
-        <div ref={bottomRef} />
-      </main>
+        )}
+
+        <div
+          className={`p-3 rounded-2xl max-w-[70%] text-sm shadow ${
+            m.is_self
+              ? "bg-blue-600 text-white rounded-br-none"
+              : "bg-gray-100 text-gray-900 rounded-bl-none"
+          }`}
+        >
+          {!m.is_self && m.sender && (
+            <div
+              className="text-xs font-semibold text-gray-700 mb-1 cursor-pointer"
+              onClick={() => openUserModal(m.sender.id)}
+            >
+              {safeName(m.sender)}
+            </div>
+          )}
+
+          <div>{m.text}</div>
+
+          <div className="text-xs mt-1 opacity-50 text-right">
+            {formatDateTime(m.timestamp)}
+          </div>
+        </div>
+      </div>
+    )
+  )}
+  <div ref={bottomRef} />
+</main>
+
 
       {/* INPUT */}
       <form onSubmit={send} className="p-4 border-t bg-white">

@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, HTTPException
 from typing import Dict, Set, List
 
-from app.services import ChatService, MessageService
+from app.services import ChatService, MessageService, UserService
 from app.app import schemas
 from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
                                    ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
@@ -145,6 +145,24 @@ async def add_user_in_chat(
     chat_service = ChatService(uow)
     user_who_add = access_token.get("user_id")
     await chat_service.add_user_in_chat(user_who_add, info_for_add_user)
+    chat_id = info_for_add_user.chat_id
+
+    user_service = UserService(uow)
+    user_whoose_add = await user_service.get_by_id(info_for_add_user.user_id)
+
+    message_service = MessageService(uow)
+    text = f"Пользователь {user_whoose_add.username} подключился к чату"
+    message = await message_service.create_message(chat_id=chat_id, data=text)
+    members_chat = await chat_service.get_members(chat_id, return_id=True)
+    await manager.broadcast(
+        message=text,
+        chat_id=chat_id,
+        sender_id=None,
+        receivers_id=members_chat,
+        created_at=message.created_at.isoformat(),
+        sender=None,
+    )
+
     return schemas.Response(data=None)
 
 @chats.post(
@@ -158,9 +176,24 @@ async def delete_me_from_chat(
                             access_token = Depends(security.decode_jwt_access),
                             uow: IUnitOfWork = Depends(get_unit_of_work)
                             ):
+
     chat_service = ChatService(uow)
     user_id = access_token.get("user_id")
-    await chat_service.delete_user_from_chat(user_id, chat_id)
+    username = await chat_service.delete_user_from_chat(user_id, chat_id)
+
+    message_service = MessageService(uow)
+    text = f"Пользователь {username} покинул чат"
+    message = await message_service.create_message(chat_id=chat_id, data=text)
+    members_chat = await chat_service.get_members(chat_id, return_id=True)
+    await manager.broadcast(
+        message=text,
+        chat_id=chat_id,
+        sender_id=None,
+        receivers_id=members_chat,
+        created_at=message.created_at.isoformat(),
+        sender=None,
+    )
+
     return schemas.Response(data=None)
 
 @chats.post(

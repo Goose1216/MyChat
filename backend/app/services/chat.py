@@ -88,6 +88,9 @@ class ChatService:
             await uow.chat_participant.delete(chat_participant.id)
             await uow.commit()
 
+            user = await uow.user.get_one_by(id=user_id)
+            return user.username
+
     async def get_chat(self, chat_id: int, user_id: int):
         async with self.uow as uow:
             return await self._get_chat(chat_id, user_id, uow)
