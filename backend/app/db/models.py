@@ -29,6 +29,7 @@ class User(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     password: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='sender')
     chat_participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='user')

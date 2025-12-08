@@ -117,9 +117,17 @@ export default function ChatScreen({
     setViewedUserId(id);
     setLoadingUser(true);
     try {
-      const res = await fetchWithAuth(`${API}/users/${id}/`);
+      const res = await fetchWithAuth(`${API}/users/${id}/${chat.id}`);
       const data = await res.json().catch(() => null);
-      setViewedUser(data?.data || null);
+      if (data?.data) {
+        setViewedUser({
+          ...data.data,
+          count_message: data.data.count_message || 0,
+          count_message_in_this_chat: data.data.count_message_in_this_chat || 0,
+        });
+      } else {
+        setViewedUser(null);
+      }
     } catch (err) {
       console.error(err);
       setViewedUser(null);
@@ -150,48 +158,47 @@ export default function ChatScreen({
     }
   };
 
-const loadMembers = async () => {
-  try {
-    const res = await fetchWithAuth(`${API}/chats/${chat.id}/members`);
-    const data = await res.json().catch(() => ({}));
-    setMembers(Array.isArray(data?.data) ? data.data : []);
-  } catch (err) {
-    console.error(err);
-    setMembers([]);
-  }
-};
+  const loadMembers = async () => {
+    try {
+      const res = await fetchWithAuth(`${API}/chats/${chat.id}/members`);
+      const data = await res.json().catch(() => ({}));
+      setMembers(Array.isArray(data?.data) ? data.data : []);
+    } catch (err) {
+      console.error(err);
+      setMembers([]);
+    }
+  };
 
-const handleAddUser = async () => {
-  if (!selectedUserId) {
-    setAddError("Выберите пользователя");
-    return;
-  }
-  setAddError("");
-
-  try {
-    const res = await fetchWithAuth(`${API}/chats/add_user/`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chat.id, user_id: Number(selectedUserId) }),
-    });
-
-    const data = await res.json().catch(() => ({}));
-
-    if (res.ok) {
-      await loadMembers(); // <-- Обновляем список участников
-      setShowAddModal(false);
-      setSelectedUserId("");
+  const handleAddUser = async () => {
+    if (!selectedUserId) {
+      setAddError("Выберите пользователя");
       return;
     }
+    setAddError("");
 
-    let errorMessage = data?.description || data?.errors?.[0]?.message || data?.message || "Ошибка добавления";
-    setAddError(errorMessage);
-  } catch (err) {
-    console.error(err);
-    setAddError("Ошибка соединения");
-  }
-};
+    try {
+      const res = await fetchWithAuth(`${API}/chats/add_user/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chat.id, user_id: Number(selectedUserId) }),
+      });
 
+      const data = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        await loadMembers(); // <-- Обновляем список участников
+        setShowAddModal(false);
+        setSelectedUserId("");
+        return;
+      }
+
+      let errorMessage = data?.description || data?.errors?.[0]?.message || data?.message || "Ошибка добавления";
+      setAddError(errorMessage);
+    } catch (err) {
+      console.error(err);
+      setAddError("Ошибка соединения");
+    }
+  };
 
   const leaveChat = async () => {
     try {
@@ -233,7 +240,6 @@ const handleAddUser = async () => {
             </div>
           ))}
 
-          {/* Кнопки только для группового чата */}
           {chat.chat_type !== "private" && (
             <>
               <button
@@ -255,63 +261,34 @@ const handleAddUser = async () => {
 
       {/* СООБЩЕНИЯ */}
       <main className="flex-1 p-4 max-w-4xl mx-auto w-full overflow-y-auto">
-  {messages.map((m) =>
-    m.is_system ? (
-      // ⭐ СИСТЕМНОЕ СООБЩЕНИЕ (В ЦЕНТРЕ)
-      <div key={m.id} className="w-full text-center my-3">
-        <div className="text-gray-500 text-xs italic">
-          {m.text}
-        </div>
-        <div className="text-gray-400 text-[10px] mt-1">
-          {formatDateTime(m.timestamp)}
-        </div>
-      </div>
-    ) : (
-      // ⭐ ОБЫЧНОЕ СООБЩЕНИЕ (ТВОЙ ДИЗАЙН СОХРАНЁН)
-      <div
-        key={m.id}
-        className={`flex items-start gap-2 mb-3 ${
-          m.is_self ? "justify-end" : "justify-start"
-        }`}
-      >
-        {!m.is_self && m.sender && (
-          <div
-            className={`w-10 h-10 flex items-center justify-center rounded-full text-white font-bold shrink-0 ${avatarColor(
-              m.sender.id
-            )}`}
-          >
-            {safeName(m.sender).charAt(0).toUpperCase()}
-          </div>
-        )}
-
-        <div
-          className={`p-3 rounded-2xl max-w-[70%] text-sm shadow ${
-            m.is_self
-              ? "bg-blue-600 text-white rounded-br-none"
-              : "bg-gray-100 text-gray-900 rounded-bl-none"
-          }`}
-        >
-          {!m.is_self && m.sender && (
-            <div
-              className="text-xs font-semibold text-gray-700 mb-1 cursor-pointer"
-              onClick={() => openUserModal(m.sender.id)}
-            >
-              {safeName(m.sender)}
+        {messages.map((m) =>
+          m.is_system ? (
+            <div key={m.id} className="w-full text-center my-3">
+              <div className="text-gray-500 text-xs italic">{m.text}</div>
+              <div className="text-gray-400 text-[10px] mt-1">{formatDateTime(m.timestamp)}</div>
             </div>
-          )}
-
-          <div>{m.text}</div>
-
-          <div className="text-xs mt-1 opacity-50 text-right">
-            {formatDateTime(m.timestamp)}
-          </div>
-        </div>
-      </div>
-    )
-  )}
-  <div ref={bottomRef} />
-</main>
-
+          ) : (
+            <div key={m.id} className={`flex items-start gap-2 mb-3 ${m.is_self ? "justify-end" : "justify-start"}`}>
+              {!m.is_self && m.sender && (
+                <div className={`w-10 h-10 flex items-center justify-center rounded-full text-white font-bold shrink-0 ${avatarColor(m.sender.id)}`}>
+                  {safeName(m.sender).charAt(0).toUpperCase()}
+                </div>
+              )}
+              <div className={`p-3 rounded-2xl max-w-[70%] text-sm shadow ${m.is_self ? "bg-blue-600 text-white rounded-br-none" : "bg-gray-100 text-gray-900 rounded-bl-none"}`}>
+                {!m.is_self && m.sender && (
+                  <div className="text-xs font-semibold text-gray-700 mb-1 cursor-pointer"
+                       onClick={() => openUserModal(m.sender.id)}>
+                    {safeName(m.sender)}
+                  </div>
+                )}
+                <div>{m.text}</div>
+                <div className="text-xs mt-1 opacity-50 text-right">{formatDateTime(m.timestamp)}</div>
+              </div>
+            </div>
+          )
+        )}
+        <div ref={bottomRef} />
+      </main>
 
       {/* INPUT */}
       <form onSubmit={send} className="p-4 border-t bg-white">
@@ -328,7 +305,7 @@ const handleAddUser = async () => {
         </div>
       </form>
 
-      {/* MODAL ПРОСМОТРА ЧУЖОГО ПРОФИЛЯ */}
+      {/* MODAL ПРОФИЛЯ */}
       {viewedUserId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-lg">
@@ -340,6 +317,8 @@ const handleAddUser = async () => {
                 <div><b>Логин:</b> {viewedUser.username}</div>
                 <div><b>Email:</b> {viewedUser.email}</div>
                 <div><b>Телефон:</b> {viewedUser.phone}</div>
+                <div><b>Всего сообщений:</b> {viewedUser.count_message}</div>
+                <div><b>Сообщений в этом чате:</b> {viewedUser.count_message_in_this_chat}</div>
               </div>
             ) : (
               <div className="text-red-600 text-center">Не удалось загрузить данные</div>

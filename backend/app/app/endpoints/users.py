@@ -157,15 +157,16 @@ async def update_user(
     return schemas.Response(data=updated)
 
 @users.get(
-    "/{user_id}/",
-    response_model=schemas.Response[schemas.UserSchemaFromBd],
+    "/{user_id}/{chat_id}",
+    response_model=schemas.Response[schemas.UserSchemaFromBdStatistic],
     name="Получить пользователя",
     responses=get_responses_description_by_codes([401, 403])
 )
 async def get_user_by_id(
         user_id: int,
+        chat_id: int,
         access_token = Depends(security.decode_jwt_access),
         uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)
-    user = await user_service.get_by_id(user_id)
+    user = await user_service.get_user_with_stat(user_id, chat_id)
     return schemas.Response(data=user)
