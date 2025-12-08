@@ -1,4 +1,7 @@
+from email.policy import default
+
 from app.utils.unit_of_work import IUnitOfWork
+from app.schemas import MessageUpdateSchema
 from app.app.schemas.message import MessageCreateSchema, MessageFromDbSchema
 from app.exceptions import InaccessibleEntity, UnfoundEntity
 
@@ -30,6 +33,37 @@ class MessageService:
 
             return message_for_return
 
+    async def delete(self, *, message_id: int, chat_id: int, user_id: int):
+        async with self.uow as uow:
+            chat = await uow.chat.get_one(pk=chat_id)
+            if not chat:
+                raise UnfoundEntity(detail="Чат не найден")
 
+            message = uow.message.get_one_by(id=message_id)
+            if not message:
+                raise UnfoundEntity(detail="Сообщение не найден")
 
+            if message.sender_id != user_id:
+                raise InaccessibleEntity(detail="Вы не владелец этого сообщения")
 
+            await uow.message.delete(pk=message_id)
+            await uow.commit()
+
+    async def patch(self, pk: int, data: MessageUpdateSchema, *, user_id: int, chat_id: int):
+        async with self.uow as uow:
+
+            message = uow.message.get_one_by(id=pk)
+            if not message:
+                raise UnfoundEntity(detail="Сообщение не найден")
+
+            if message.sender_id != user_id:
+                raise InaccessibleEntity(detail="Вы не владелец этого сообщения")
+
+            if message.chat_id != chat_id:
+                raise InaccessibleEntity(detail="Сообщение не принадлежит этому чату")
+
+            message_from_db = await uow.message.update(pk, data)
+            message_for_return = MessageFromDbSchema.model_validate(message_from_db)
+            await uow.commit()
+
+            return message_for_return

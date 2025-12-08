@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME
+from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME, Integer
 from datetime import datetime
 from typing import Optional, List
 import enum
@@ -19,6 +19,13 @@ class UserRole(str, enum.Enum):
     MEMBER = "member"
     ADMIN = "admin"
     OWNER = "owner"
+
+
+class MessageStatus(str, enum.Enum):
+    SEND = "send"
+    DELIVERED = "delivered"
+    IN_WORK = "in_work"
+    COMPLETED = "completed"
 
 
 class User(Base):
@@ -94,6 +101,7 @@ class Message(Base):
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    status: Mapped[MessageStatus] = mapped_column(Enum(MessageStatus), default=MessageStatus.SEND)
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages', lazy='joined')
