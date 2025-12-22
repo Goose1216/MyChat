@@ -125,9 +125,24 @@ async def update_tokens(
     else:
         raise NotAuthenticated(detail="Неправильный токен, зайдите снова")
 
+
+@users.post(
+    "/stats/",
+   # response_model=schemas.Response[List[schemas.stats]],
+    name="Получить статистику всех пользователей",
+    responses=get_responses_description_by_codes([401, 403, 404]),
+)
+async def get_stats_about_user(
+        access_token=Depends(security.decode_jwt_access),
+        uow: IUnitOfWork = Depends(get_unit_of_work)
+):
+    user_service = UserService(uow)
+    return schemas.Response(data=await user_service.get_stats())
+
+
 @users.post(
     "/get_all_users/",
-    response_model=schemas.Response[List[schemas.UserSchemaFromBd]],
+    response_model=schemas.Response[List[schemas.UserSchemaFromBdStatistic]],
     name="Получить всех пользователей кроме самого себя",
     responses=get_responses_description_by_codes([401, 403, 404]),
 )

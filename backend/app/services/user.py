@@ -21,6 +21,21 @@ class UserService:
             user_for_return = UserSchemaFromBd.model_validate(user_from_db)
             return user_for_return
 
+    async def get_stats(self):
+        async with self.uow as uow:
+            data_all = await uow.user.get_all_with_stat()
+            result = []
+            for data in data_all:
+                user_from_db = data['user']
+                count_message = data.get('count_message', 0)
+
+                user_for_return = UserSchemaFromBdStatistic.model_validate(user_from_db)
+                user_for_return.count_message = count_message
+
+                result.append(user_for_return)
+
+            return user_for_return
+
     async def get_user_with_stat(self, user_id: int, chat_id: int):
         async with self.uow as uow:
             data = await uow.user.get_one_with_stat(user_id, chat_id)

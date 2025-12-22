@@ -34,6 +34,26 @@ class UserRepository(Repository):
             "count_message_in_this_chat": count_in_chat,
         }
 
+    async def get_all_with_stat(self):
+        stmt_user = select(self.model)
+        res_user = await self.session.execute(stmt_user)
+        users = res_user.scalars().all()
+        if not users:
+            return None
+
+        result = []
+        for user in users:
+            stmt_count = select(func.count(Message.id)).where(Message.sender_id == user.id)
+            res_count = await self.session.execute(stmt_count)
+            count_message = res_count.scalar() or 0
+
+            result.append({
+                "user": user,
+                "count_message": count_message,
+            })
+
+        return result
+
     async def get_all(self, exception_id: int | None = None):
         stmt = select(self.model)
         if exception_id:
