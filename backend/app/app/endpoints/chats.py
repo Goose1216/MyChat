@@ -67,18 +67,24 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
                 members_chat = await chat_service.get_members(chat_id, return_id=True)
-                logger.info(schemas.UserSchemaFromBd.model_validate(message.sender))
                 await manager.broadcast(
+                    type_of_message=0,
+                    message_id=message.id,
                     message=text,
                     chat_id=chat_id,
                     sender_id=user_id,
                     receivers_id=members_chat,
                     created_at=message.created_at.isoformat(),
+                    updated_at=message.updated_at.isoformat(),
                     sender=message.sender.model_dump(),
                 )
 
+
+            except WebSocketDisconnect:
+                raise
             except Exception as e:
-               raise WebSocketDisconnect
+                logger.exception(f"WS error: {e}")
+                break
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
@@ -130,6 +136,7 @@ async def get_all_messages_for_chat(
     messages = await chat_service.get_all_message_for_chat_for_member(chat_id=chat_id, member_id=access_token.get("user_id"))
     return schemas.Response(data=messages)
 
+
 @chats.post(
     "/add_user/",
     response_model=schemas.Response[None],
@@ -155,17 +162,20 @@ async def add_user_in_chat(
     message = await message_service.create_message(chat_id=chat_id, data=text)
     members_chat = await chat_service.get_members(chat_id, return_id=True)
     await manager.broadcast(
+        type_of_message=0,
+        message_id=message.id,
         message=text,
         chat_id=chat_id,
         sender_id=None,
         receivers_id=members_chat,
         created_at=message.created_at.isoformat(),
+        updated_at=message.updated_at.isoformat(),
         sender=None,
     )
 
     return schemas.Response(data=None)
 
-@chats.post(
+@chats.delete(
     "/{chat_id}/me/delete/",
     response_model=schemas.Response[None],
     name="Выйти из чата",
@@ -186,11 +196,14 @@ async def delete_me_from_chat(
     message = await message_service.create_message(chat_id=chat_id, data=text)
     members_chat = await chat_service.get_members(chat_id, return_id=True)
     await manager.broadcast(
+        type_of_message=0,
+        message_id=message.id,
         message=text,
         chat_id=chat_id,
         sender_id=None,
         receivers_id=members_chat,
         created_at=message.created_at.isoformat(),
+        updated_at=message.updated_at.isoformat(),
         sender=None,
     )
 

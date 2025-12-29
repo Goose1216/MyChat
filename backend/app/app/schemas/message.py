@@ -17,13 +17,14 @@ class MessageFromDbSchema(MessageCreateSchema):
 
     id: int
     created_at: datetime
+    updated_at: datetime
     sender: UserSchemaFromBd | None = None
 
     _convert_user = field_validator("sender", mode="before")(sqlalchemy_to_pydantic(UserSchemaFromBd))
 
 
 class MessageUpdateSchema(BaseModel):
-    content: str | None
+    content: str | None = None
 
 
 class MessageDeleteSchema(BaseModel):

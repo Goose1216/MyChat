@@ -1,10 +1,19 @@
+from app.app import schemas
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.message import MessageCreateSchema, MessageFromDbSchema
 from app.exceptions import InaccessibleEntity, UnfoundEntity
+from app.utils.websocket import manager
 
 class MessageService:
     def __init__(self, uow: IUnitOfWork):
         self.uow = uow
+
+    async def get_one(self, pk: int):
+        async with self.uow as uow:
+            message = await uow.message.get_one(pk)
+            message_for_return = MessageFromDbSchema.model_validate(message)
+
+            return message_for_return
 
     async def create_message(self, *, chat_id: int, sender_id: int | None = None, data: str | None = None):
         async with self.uow as uow:
@@ -30,6 +39,12 @@ class MessageService:
 
             return message_for_return
 
+    async def update(self, pk: int, data: schemas.MessageUpdateSchema):
+        async with self.uow as uow:
+            await uow.message.update(pk, data)
+            message = await self.uow.message.get_one(pk)
 
+            message_for_return = MessageFromDbSchema.model_validate(message)
+            await uow.commit()
 
-
+            return message_for_return
