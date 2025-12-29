@@ -1,12 +1,58 @@
 import uuid
-from sqlalchemy import insert, select, update, delete, or_, and_
+from sqlalchemy import insert, select, update, delete, or_, and_, func, case
 
 from .base import Repository
-from app.db.models import User, ChatParticipant, RefreshTokens
+from app.db.models import User, ChatParticipant, RefreshTokens, Message
 from app.security import security
 
 class UserRepository(Repository):
     model = User
+
+    async def get_one_with_stat(self, user_id: int, chat_id: int | None):
+        stmt_user = select(self.model).where(self.model.id == user_id)
+        res_user = await self.session.execute(stmt_user)
+        user = res_user.scalars().first()
+        if not user:
+            return None
+
+        stmt_count = select(func.count(Message.id)).where(Message.sender_id == user_id)
+        res_count = await self.session.execute(stmt_count)
+        count_message = res_count.scalar() or 0
+
+        count_in_chat = None
+        if chat_id is not None:
+            stmt_chat = select(func.count(Message.id)).where(
+                Message.sender_id == user_id,
+                Message.chat_id == chat_id
+            )
+            res_chat = await self.session.execute(stmt_chat)
+            count_in_chat = res_chat.scalar() or None
+
+        return {
+            "user": user,
+            "count_message": count_message,
+            "count_message_in_this_chat": count_in_chat,
+        }
+
+    async def get_all_with_stat(self):
+        stmt_user = select(self.model)
+        res_user = await self.session.execute(stmt_user)
+        users = res_user.scalars().all()
+        if not users:
+            return None
+
+        result = []
+        for user in users:
+            stmt_count = select(func.count(Message.id)).where(Message.sender_id == user.id)
+            res_count = await self.session.execute(stmt_count)
+            count_message = res_count.scalar() or 0
+
+            result.append({
+                "user": user,
+                "count_message": count_message,
+            })
+
+        return result
 
     async def get_all(self, exception_id: int | None = None):
         stmt = select(self.model)

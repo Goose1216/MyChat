@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status, HTTPException
 from typing import Dict, Set, List
 
-from app.services import ChatService, MessageService
+from app.services import ChatService, MessageService, UserService
 from app.app import schemas
 from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
                                    ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
@@ -62,79 +62,29 @@ async def websocket_endpoint(websocket: WebSocket):
             try:
                 data = await websocket.receive_text()
                 message_data = json.loads(data)
-                event_type = message_data.get("type")
+                chat_id = int(message_data.get("chat_id"))
+                text = message_data.get("text", "").strip()
 
-                # ========= CREATE MESSAGE ==========
-                if event_type == "new_message":
-                    chat_id = int(message_data.get("chat_id"))
-                    text = message_data.get("text", "").strip()
-                    message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
-
-                    members_chat = await chat_service.get_members(chat_id, return_id=True)
-
-                    await manager.broadcast(
-                        {
-                            "type": "new_message",
-                            "id": message.id,
-                            "chat_id": chat_id,
-                            "sender_id": user_id,
-                            "text": message.content,
-                            "status": message.status.value,
-                            "created_at": message.created_at.isoformat(),
-                            "sender": message.sender.model_dump(),
-                        },
-                        members_chat
-                    )
-                    continue
-
-                # ========= UPDATE MESSAGE ==========
-                if event_type == "update_message":
-                    chat_id = int(message_data["chat_id"])
-                    message_id = int(message_data["message_id"])
-                    new_text = message_data.get("new_text")
-                    new_status = message_data.get("new_status")
-
-                    updated = await message_service.patch(
-                        message_id,
-                        schemas.MessageUpdateSchema(content=new_text, status=new_status),
-                        user_id=user_id,
-                        chat_id=chat_id
-                    )
-
-                    members = await chat_service.get_members(chat_id, return_id=True)
-                    await manager.broadcast(
-                        {
-                            "type": "update_message",
-                            "chat_id": chat_id,
-                            "message_id": message_id,
-                            "new_text": new_text,
-                            "new_status": new_status
-                        },
-                        members
-                    )
-                    continue
-
-                # ========= DELETE MESSAGE ==========
-                if event_type == "delete_message":
-                    chat_id = int(message_data["chat_id"])
-                    message_id = int(message_data["message_id"])
-
-                    await message_service.delete(chat_id, message_id, user_id)
-
-                    members = await chat_service.get_members(chat_id, return_id=True)
-                    await manager.broadcast(
-                        {
-                            "type": "delete_message",
-                            "chat_id": chat_id,
-                            "message_id": message_id
-                        },
-                        members
-                    )
-                    continue
+                message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
+                members_chat = await chat_service.get_members(chat_id, return_id=True)
+                await manager.broadcast(
+                    type_of_message=0,
+                    message_id=message.id,
+                    message=text,
+                    chat_id=chat_id,
+                    sender_id=user_id,
+                    receivers_id=members_chat,
+                    created_at=message.created_at.isoformat(),
+                    updated_at=message.updated_at.isoformat(),
+                    sender=message.sender.model_dump(),
+                )
 
 
+            except WebSocketDisconnect:
+                raise
             except Exception as e:
-               raise WebSocketDisconnect
+                logger.exception(f"WS error: {e}")
+                break
 
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
@@ -186,41 +136,6 @@ async def get_all_messages_for_chat(
     messages = await chat_service.get_all_message_for_chat_for_member(chat_id=chat_id, member_id=access_token.get("user_id"))
     return schemas.Response(data=messages)
 
-@chats.patch(
-    "/{chat_id}/messages/{message_id}/",
-    response_model = schemas.Response[List[schemas.UserSchemaFromBd]],
-    name="Обновить своё сообщение",
-    description="Только для владельца сообщения",
-    responses = get_responses_description_by_codes([401, 403, 404])
-)
-async def update_message(
-        chat_id: int,
-        message_id: int,
-        payload: schemas.MessageUpdateSchema,
-        access_token=Depends(security.decode_jwt_access),
-        uow: IUnitOfWork = Depends(get_unit_of_work)
-):
-    user_id = access_token.get("user_id")
-    message_service = MessageService(uow)
-    updated = await message_service.patch(message_id, payload, user_id=user_id, chat_id=chat_id)
-    return schemas.Response(data=updated)
-
-@chats.delete(
-    "/{chat_id}/messages/{message_id}/",
-    response_model = schemas.Response[List[schemas.UserSchemaFromBd]],
-    name="Удалить своё сообщение",
-    description="Только для владельца сообщения",
-    responses = get_responses_description_by_codes([401, 403, 404])
-)
-async def delete_my_message(
-                            chat_id: int,
-                            message_id: int,
-                            access_token = Depends(security.decode_jwt_access),
-                            uow: IUnitOfWork = Depends(get_unit_of_work)
-):
-    message = MessageService(uow)
-    await message.delete(chat_id=chat_id, message_id=message_id, user_id=int(access_token.get("user_id")))
-    return schemas.Response(data=None)
 
 @chats.post(
     "/add_user/",
@@ -237,9 +152,30 @@ async def add_user_in_chat(
     chat_service = ChatService(uow)
     user_who_add = access_token.get("user_id")
     await chat_service.add_user_in_chat(user_who_add, info_for_add_user)
+    chat_id = info_for_add_user.chat_id
+
+    user_service = UserService(uow)
+    user_whoose_add = await user_service.get_by_id(info_for_add_user.user_id)
+
+    message_service = MessageService(uow)
+    text = f"Пользователь {user_whoose_add.username} подключился к чату"
+    message = await message_service.create_message(chat_id=chat_id, data=text)
+    members_chat = await chat_service.get_members(chat_id, return_id=True)
+    await manager.broadcast(
+        type_of_message=0,
+        message_id=message.id,
+        message=text,
+        chat_id=chat_id,
+        sender_id=None,
+        receivers_id=members_chat,
+        created_at=message.created_at.isoformat(),
+        updated_at=message.updated_at.isoformat(),
+        sender=None,
+    )
+
     return schemas.Response(data=None)
 
-@chats.post(
+@chats.delete(
     "/{chat_id}/me/delete/",
     response_model=schemas.Response[None],
     name="Выйти из чата",
@@ -250,9 +186,27 @@ async def delete_me_from_chat(
                             access_token = Depends(security.decode_jwt_access),
                             uow: IUnitOfWork = Depends(get_unit_of_work)
                             ):
+
     chat_service = ChatService(uow)
     user_id = access_token.get("user_id")
-    await chat_service.delete_user_from_chat(user_id, chat_id)
+    username = await chat_service.delete_user_from_chat(user_id, chat_id)
+
+    message_service = MessageService(uow)
+    text = f"Пользователь {username} покинул чат"
+    message = await message_service.create_message(chat_id=chat_id, data=text)
+    members_chat = await chat_service.get_members(chat_id, return_id=True)
+    await manager.broadcast(
+        type_of_message=0,
+        message_id=message.id,
+        message=text,
+        chat_id=chat_id,
+        sender_id=None,
+        receivers_id=members_chat,
+        created_at=message.created_at.isoformat(),
+        updated_at=message.updated_at.isoformat(),
+        sender=None,
+    )
+
     return schemas.Response(data=None)
 
 @chats.post(

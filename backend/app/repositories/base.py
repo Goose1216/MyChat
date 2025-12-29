@@ -75,9 +75,8 @@ class Repository(ABC):
         res = await self.session.execute(stmt)
         return res.scalars().all()
 
-
     async def _adapt_fields(
-            self, obj: str | BaseModel, **kwargs
+            self, obj: dict | BaseModel, **kwargs
     ) -> dict:
         "pydantic model to dict+kwargs"
         data = (

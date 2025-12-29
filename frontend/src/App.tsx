@@ -11,7 +11,6 @@ export default function App() {
   const [token, setToken] = useState<string | null>(
     localStorage.getItem("access_token")
   );
-
   const [userId, setUserId] = useState<number | null>(() => {
     const u = localStorage.getItem("user_id");
     return u ? parseInt(u) : null;
@@ -23,55 +22,6 @@ export default function App() {
 
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
 
-  async function apiMe(token: string) {
-    const res = await fetch(`${import.meta.env.VITE_API_URL}/users/me/`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!res.ok) throw new Error("Ошибка при получении пользователя");
-    return res.json();
-  }
-
-  useEffect(() => {
-    if (token && !userId) {
-      (async () => {
-        try {
-          const data = await apiMe(token);
-          if (data?.data?.id) {
-            setUserId(data.data.id);
-            localStorage.setItem("user_id", String(data.data.id));
-            setView("chats");
-          } else {
-            setView("login");
-          }
-        } catch {
-          setToken(null);
-          localStorage.removeItem("access_token");
-          setView("login");
-        }
-      })();
-    }
-  }, []);
-
-  const handleLogin = (accessToken: string, id: number, refreshToken?: string) => {
-    setToken(accessToken);
-    setUserId(id);
-    localStorage.setItem("access_token", accessToken);
-    if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
-    localStorage.setItem("user_id", String(id));
-    setView("chats");
-  };
-
-  const handleLogout = () => {
-    setToken(null);
-    setUserId(null);
-    localStorage.removeItem("access_token");
-    localStorage.removeItem("user_id");
-    localStorage.removeItem("refresh_token");
-    setView("login");
-  };
-
-  const handleRegistered = () => setView("login");
-
   const openChat = (chat: Chat) => {
     setSelectedChat(chat);
     setView("chat");
@@ -82,63 +32,65 @@ export default function App() {
     setView("chats");
   };
 
-  // ---- Открыть свой профиль (зелёная кнопка) ----
-  const goToMyProfile = () => {
-    setView("profile");
-  };
+  return (
+    <WebSocketProvider>
+      {view === "login" && (
+        <LoginScreen
+          onLogin={(accessToken, id, refreshToken) => {
+            setToken(accessToken);
+            setUserId(id);
+            localStorage.setItem("access_token", accessToken);
+            localStorage.setItem("user_id", String(id));
+            if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
+            setView("chats");
+          }}
+          onGoRegister={() => setView("register")}
+        />
+      )}
 
-  // ---- Назад из профиля ----
-  const backFromProfile = () => setView("chats");
+      {view === "register" && (
+        <RegistrationScreen
+          onRegistered={() => setView("login")}
+          onGoLogin={() => setView("login")}
+        />
+      )}
 
-  /* ===========================
-      РЕНДЕР ЭКРАНОВ
-  ============================ */
-
-  if (view === "login")
-    return (
-      <WebSocketProvider>
-        <LoginScreen onLogin={handleLogin} onGoRegister={() => setView("register")} />
-      </WebSocketProvider>
-    );
-
-  if (view === "register")
-    return (
-      <WebSocketProvider>
-        <RegistrationScreen onRegistered={handleRegistered} onGoLogin={() => setView("login")} />
-      </WebSocketProvider>
-    );
-
-  if (view === "profile" && token && userId !== null)
-    return (
-      <WebSocketProvider>
-        <ProfileScreen token={token} userId={userId} onBack={backFromProfile} onLogout={handleLogout} />
-      </WebSocketProvider>
-    );
-
-  if (view === "chats" && token && userId !== null)
-    return (
-      <WebSocketProvider>
+      {view === "chats" && token && userId !== null && (
         <ChatsListScreen
           access_token={token}
           userId={userId}
           onSelectChat={openChat}
-          onLogout={handleLogout}
-          onOpenProfile={goToMyProfile}
+          onLogout={() => {
+            setToken(null);
+            setUserId(null);
+            localStorage.clear();
+            setView("login");
+          }}
+          onOpenProfile={() => setView("profile")}
         />
-      </WebSocketProvider>
-    );
+      )}
 
-  if (view === "chat" && token && userId !== null && selectedChat)
-    return (
-      <WebSocketProvider>
+      {view === "chat" && token && userId !== null && selectedChat && (
         <ChatScreen
-          token={token}
           userId={userId}
           chat={selectedChat}
           onBack={backToChats}
         />
-      </WebSocketProvider>
-    );
+      )}
 
-  return null;
+      {view === "profile" && token && userId !== null && (
+        <ProfileScreen
+          token={token}
+          userId={userId}
+          onBack={() => setView("chats")}
+          onLogout={() => {
+            setToken(null);
+            setUserId(null);
+            localStorage.clear();
+            setView("login");
+          }}
+        />
+      )}
+    </WebSocketProvider>
+  );
 }

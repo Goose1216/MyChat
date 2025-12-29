@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME, Integer
+from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME
 from datetime import datetime
 from typing import Optional, List
 import enum
@@ -21,13 +21,6 @@ class UserRole(str, enum.Enum):
     OWNER = "owner"
 
 
-class MessageStatus(str, enum.Enum):
-    SEND = "send"
-    DELIVERED = "delivered"
-    IN_WORK = "in_work"
-    COMPLETED = "completed"
-
-
 class User(Base):
     __tablename__ = 'users'
 
@@ -36,6 +29,7 @@ class User(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(20), unique=True, nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     password: Mapped[str] = mapped_column(String(1000), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='sender')
     chat_participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='user')
@@ -101,7 +95,7 @@ class Message(Base):
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    status: Mapped[MessageStatus] = mapped_column(Enum(MessageStatus), default=MessageStatus.SEND)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages', lazy='joined')

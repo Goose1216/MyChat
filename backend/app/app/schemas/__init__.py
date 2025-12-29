@@ -20,6 +20,7 @@ UserSchemaRegister,
 Tokens,
 UserSchemaPatch,
 UserChangePassword,
+UserSchemaFromBdStatistic,
 )
 from .response import (
 Response,
