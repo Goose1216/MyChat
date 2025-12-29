@@ -87,7 +87,7 @@ class Repository(ABC):
         data.update(**kwargs)
         return data
 
-    async def update(self, pk: int, data: BaseModel):
+    async def update(self, pk: int, data: BaseModel | dict):
         fields_ = await self._adapt_fields(data)
         fields = {}
         info = inspect(self.model)

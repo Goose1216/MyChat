@@ -19,6 +19,7 @@ class MessageFromDbSchema(MessageCreateSchema):
     created_at: datetime
     updated_at: datetime
     sender: UserSchemaFromBd | None = None
+    is_deleted: bool
 
     _convert_user = field_validator("sender", mode="before")(sqlalchemy_to_pydantic(UserSchemaFromBd))
 

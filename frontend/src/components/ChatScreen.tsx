@@ -47,6 +47,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
           sender_id: m.sender_id,
           text: m.content,
           timestamp: m.updated_at || m.created_at,
+          is_deleted: m.is_deleted,
           sender: m.sender,
           is_self: m.sender_id !== null && m.sender_id === userId,
           is_system: m.sender_id === null,
@@ -74,6 +75,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
             sender_id: msg.sender_id,
             text: msg.text,
             timestamp: msg.created_at,
+            is_deleted: msg.is_deleted,
             sender: msg.sender,
             is_self: msg.sender_id === userId,
             is_system:  msg.sender === null,
@@ -92,6 +94,23 @@ export default function ChatScreen({ userId, chat, onBack }) {
                   timestamp: msg.updated_at,
                   edited: true,
                   is_system: false,
+                  is_deleted: msg.is_deleted,
+                }
+              : m
+          )
+        );
+      }
+      if (msg.type_of_message === 2) {
+        setMessages((p) =>
+          p.map((m) =>
+            m.id === msg.message_id
+              ? {
+                  ...m,
+                  text: msg.text,
+                  timestamp: msg.updated_at,
+                  edited: true,
+                  is_system: false,
+                  is_deleted: true
                 }
               : m
           )
@@ -207,6 +226,64 @@ export default function ChatScreen({ userId, chat, onBack }) {
   }
 };
 
+  const deleteMessage = async (id: number) => {
+    if (!window.confirm("Удалить сообщение?")) return;
+
+    await fetchWithAuth(`${API}/messages/${id}/`, {
+      method: "DELETE",
+    });
+    // обновление придёт через WS
+  };
+
+
+const renderMessageContent = (m: Message) => {
+    if (m.is_deleted) {
+      return (
+        <span className="italic text-gray-700 select-none">
+          Сообщение удалено
+        </span>
+      );
+    }
+
+    if (editingId === m.id) {
+      return (
+        <div className="flex gap-2">
+          <input
+            className="flex-1 border rounded px-2 py-1 text-white"
+            value={editingText}
+            onChange={(e) => setEditingText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") saveEdit();
+              if (e.key === "Escape") setEditingId(null);
+            }}
+            autoFocus
+          />
+          <button
+            onClick={saveEdit}
+            className="bg-green-600 text-white px-2 rounded"
+          >
+            ✓
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div onDoubleClick={() => startEdit(m)}>
+        {m.text}
+      </div>
+    );
+  };
+
+const renderSystemMessage = (m: Message) => {
+  return (
+    <div className="flex justify-center my-4">
+      <span className="text-xs text-gray-400 italic text-center max-w-[70%]">
+        {m.text}
+      </span>
+    </div>
+  );
+};
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -264,76 +341,66 @@ export default function ChatScreen({ userId, chat, onBack }) {
       </header>
 
       {/* MESSAGES */}
+       {/* MESSAGES */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto p-4">
           {messages.map((m) => {
-            if (m.is_system) {
-              return (
-                <div key={m.id} className="text-center my-4">
-                  <span className="text-xs text-gray-500 italic">
-                    {m.text}
-                  </span>
-                </div>
-              );
-            }
+  // ===== SYSTEM MESSAGE =====
+  if (m.is_system) {
+    return (
+      <div key={m.id}>
+        {renderSystemMessage(m)}
+      </div>
+    );
+  }
 
-            return (
-              <div
-                key={m.id}
-                className={`flex mb-3 ${
-                  m.is_self ? "justify-end" : "justify-start"
-                }`}
-              >
-                {!m.is_self && (
-                  <div
-                    className={`w-11 h-11 mr-3 rounded-full flex items-center justify-center text-white font-bold ${avatarColor(
-                      m.sender_id
-                    )}`}
-                  >
-                    {safeName(m.sender)[0]}
-                  </div>
-                )}
+  // ===== USER MESSAGE =====
+  return (
+    <div
+      key={m.id}
+      className={`flex mb-3 ${
+        m.is_self ? "justify-end" : "justify-start"
+      }`}
+    >
+      {!m.is_self && (
+        <div
+          className={`w-11 h-11 mr-3 rounded-full flex items-center justify-center text-white font-bold ${avatarColor(
+            m.sender_id
+          )}`}
+        >
+          {safeName(m.sender)[0]}
+        </div>
+      )}
 
-                <div
-                  className={`max-w-[70%] p-3 rounded-2xl text-sm ${
-                    m.is_self
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-100 text-gray-900"
-                  }`}
-                >
-                  {editingId === m.id ? (
-                    <div className="flex gap-2">
-                      <input
-                        className="flex-1 border rounded px-2 py-1 text-white"
-                        value={editingText}
-                        onChange={(e) => setEditingText(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter") saveEdit();
-                          if (e.key === "Escape") setEditingId(null);
-                        }}
-                        autoFocus
-                      />
-                      <button
-                        onClick={saveEdit}
-                        className="bg-green-600 text-white px-2 rounded"
-                      >
-                        ✓
-                      </button>
-                    </div>
-                  ) : (
-                    <div onDoubleClick={() => startEdit(m)}>
-                      {m.text}
-                    </div>
-                  )}
+      <div
+        className={`relative max-w-[70%] p-3 rounded-2xl text-sm group ${
+          m.is_deleted
+            ? "bg-gray-200 text-gray-700"
+            : m.is_self
+              ? "bg-blue-600 text-white"
+              : "bg-gray-100 text-gray-900"
+        }`}
+      >
+        {renderMessageContent(m)}
 
-                  <div className="text-xs opacity-70 mt-1 text-right">
-                    {formatDateTime(m.timestamp)}
-                    {m.edited && " · изменено"}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        {/* ACTIONS */}
+        {m.is_self && !m.is_deleted && (
+          <button
+            onClick={() => deleteMessage(m.id)}
+            className="absolute -top-2 -right-2 hidden group-hover:block text-xs bg-red-600 text-white rounded-full px-1.5"
+          >
+            🗑
+          </button>
+        )}
+
+        <div className="text-xs opacity-70 mt-1 text-right">
+          {formatDateTime(m.timestamp)}
+          {!m.is_deleted && m.edited && " · изменено"}
+        </div>
+      </div>
+    </div>
+  );
+})}
           <div ref={bottomRef} />
         </div>
       </main>

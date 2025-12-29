@@ -5,11 +5,12 @@ export type Chat = {
   updated_at?: string | null;
 };
 
-export type Message = {
+export interface Message {
   id: number;
-  text: string;
+  content: string | null;
   sender_id: number;
   chat_id: number;
-  is_self: boolean;
-  timestamp: string;
-};
+  created_at: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+}
