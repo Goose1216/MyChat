@@ -2,7 +2,7 @@ FROM node:22-alpine
 
 WORKDIR /src/frontend
 
-COPY package*.json ./
+COPY package.json ./
 COPY *.config.* ./
 COPY *.json ./
 
