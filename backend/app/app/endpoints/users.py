@@ -164,8 +164,6 @@ async def update_user(
         access_token=Depends(security.decode_jwt_access),
         uow: IUnitOfWork = Depends(get_unit_of_work)
 ):
-    #Добавить валидацию
-
     user_id = access_token.get("user_id")
     user_service = UserService(uow)
     updated = await user_service.patch(user_id, payload)
