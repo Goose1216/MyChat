@@ -67,17 +67,10 @@ async def websocket_endpoint(websocket: WebSocket):
 
                 message = await message_service.create_message(chat_id=chat_id, data=text, sender_id=user_id)
                 members_chat = await chat_service.get_members(chat_id, return_id=True)
-                await manager.broadcast(
-                    type_of_message=0,
-                    message_id=message.id,
-                    message=text,
-                    chat_id=chat_id,
-                    sender_id=user_id,
-                    receivers_id=members_chat,
-                    created_at=message.created_at.isoformat(),
-                    updated_at=message.updated_at.isoformat(),
-                    sender=message.sender.model_dump(),
-                )
+                await manager.broadcast(type_of_message=0, message=text, chat_id=chat_id, receivers_id=members_chat,
+                                        message_id=message.id, sender_id=user_id,
+                                        created_at=message.created_at.isoformat(),
+                                        updated_at=message.updated_at.isoformat(), sender=message.sender.model_dump())
 
 
             except WebSocketDisconnect:
@@ -136,6 +129,28 @@ async def get_all_messages_for_chat(
     messages = await chat_service.get_all_message_for_chat_for_member(chat_id=chat_id, member_id=access_token.get("user_id"))
     return schemas.Response(data=messages)
 
+@chats.post(
+    "/{chat_id}/{user_id}/typing/",
+    response_model=schemas.Response[None],
+    name="Поинт для отображение того, что пользователь печатает",
+    responses=get_responses_description_by_codes([])
+)
+async def user_typing(
+        chat_id: int,
+        user_id: int,
+        access_token = Depends(security.decode_jwt_access),
+        uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_service = UserService(uow)
+    user = await user_service.get_by_id(user_id=user_id)
+
+    chat_service = ChatService(uow)
+    members_chat = await chat_service.get_members(chat_id, return_id=True)
+
+    await manager.broadcast(type_of_message=3, message=f"{user.username} печатает...", chat_id=chat_id,
+                            sender_id= user_id, receivers_id=members_chat)
+    return schemas.Response(data=None)
+
 
 @chats.post(
     "/add_user/",
@@ -161,17 +176,9 @@ async def add_user_in_chat(
     text = f"Пользователь {user_whoose_add.username} подключился к чату"
     message = await message_service.create_message(chat_id=chat_id, data=text)
     members_chat = await chat_service.get_members(chat_id, return_id=True)
-    await manager.broadcast(
-        type_of_message=0,
-        message_id=message.id,
-        message=text,
-        chat_id=chat_id,
-        sender_id=None,
-        receivers_id=members_chat,
-        created_at=message.created_at.isoformat(),
-        updated_at=message.updated_at.isoformat(),
-        sender=None,
-    )
+    await manager.broadcast(type_of_message=0, message=text, chat_id=chat_id, receivers_id=members_chat,
+                            message_id=message.id, sender_id=None, created_at=message.created_at.isoformat(),
+                            updated_at=message.updated_at.isoformat(), sender=None)
 
     return schemas.Response(data=None)
 
@@ -195,17 +202,9 @@ async def delete_me_from_chat(
     text = f"Пользователь {username} покинул чат"
     message = await message_service.create_message(chat_id=chat_id, data=text)
     members_chat = await chat_service.get_members(chat_id, return_id=True)
-    await manager.broadcast(
-        type_of_message=0,
-        message_id=message.id,
-        message=text,
-        chat_id=chat_id,
-        sender_id=None,
-        receivers_id=members_chat,
-        created_at=message.created_at.isoformat(),
-        updated_at=message.updated_at.isoformat(),
-        sender=None,
-    )
+    await manager.broadcast(type_of_message=0, message=text, chat_id=chat_id, receivers_id=members_chat,
+                            message_id=message.id, sender_id=None, created_at=message.created_at.isoformat(),
+                            updated_at=message.updated_at.isoformat(), sender=None)
 
     return schemas.Response(data=None)
 

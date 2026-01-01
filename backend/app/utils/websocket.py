@@ -24,11 +24,11 @@ class ConnectionManager:
     async def broadcast(
             self,
             type_of_message: int,
-            message_id: int,
             message: str,
             chat_id: int,
-            sender_id: int,
             receivers_id: list[int],
+            message_id: int | None = None,
+            sender_id: int | None = None,
             **kwargs
     ):
         for receiver_id in receivers_id:

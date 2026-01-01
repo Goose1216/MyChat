@@ -42,17 +42,11 @@ async def update_message(
     message_for_return = await message_service.update(pk=message_id, data=data)
     members_chat = await chat_service.get_members(message.chat_id, return_id=True)
 
-    await manager.broadcast(
-        type_of_message=1,
-        message_id=message_id,
-        message=message_for_return.content,
-        chat_id=message_for_return.chat_id,
-        sender_id=message_for_return.sender_id,
-        receivers_id=members_chat,
-        created_at=message_for_return.created_at.isoformat(),
-        updated_at=message_for_return.updated_at.isoformat(),
-        sender=message_for_return.sender.model_dump(),
-    )
+    await manager.broadcast(type_of_message=1, message=message_for_return.content, chat_id=message_for_return.chat_id,
+                            receivers_id=members_chat, message_id=message_id, sender_id=message_for_return.sender_id,
+                            created_at=message_for_return.created_at.isoformat(),
+                            updated_at=message_for_return.updated_at.isoformat(),
+                            sender=message_for_return.sender.model_dump())
 
     return schemas.Response(data=message_for_return)
 
@@ -80,17 +74,11 @@ async def delete_message(
     message_for_return = await message_service.update(pk=message_id, data={"is_deleted": True})
     members_chat = await chat_service.get_members(message.chat_id, return_id=True)
 
-    await manager.broadcast(
-        type_of_message=2,
-        message_id=message_id,
-        message='Сообщение удалено',
-        chat_id=message_for_return.chat_id,
-        sender_id=message_for_return.sender_id,
-        receivers_id=members_chat,
-        is_deleted=message_for_return.is_deleted,
-        created_at=message_for_return.created_at.isoformat(),
-        updated_at=message_for_return.updated_at.isoformat(),
-        sender=message_for_return.sender.model_dump(),
-    )
+    await manager.broadcast(type_of_message=2, message='Сообщение удалено', chat_id=message_for_return.chat_id,
+                            receivers_id=members_chat, message_id=message_id, sender_id=message_for_return.sender_id,
+                            is_deleted=message_for_return.is_deleted,
+                            created_at=message_for_return.created_at.isoformat(),
+                            updated_at=message_for_return.updated_at.isoformat(),
+                            sender=message_for_return.sender.model_dump())
 
     return schemas.Response(data=message_for_return)

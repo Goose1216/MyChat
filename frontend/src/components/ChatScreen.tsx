@@ -7,6 +7,11 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const [messages, setMessages] = useState<Message[]>([]);
   const [members, setMembers] = useState<any[]>([]);
   const [newMessage, setNewMessage] = useState("");
+  type TypingMap = Record<number, number>; // user_id -> last_seen_ts
+  const [typingUsers, setTypingUsers] = useState<TypingMap>({});
+  const typingIds = Object.keys(typingUsers).map(Number);
+
+  const lastTypingRef = useRef<number>(0);
 
   // === added from old version ===
   const [profileUser, setProfileUser] = useState<any | null>(null);
@@ -116,11 +121,46 @@ export default function ChatScreen({ userId, chat, onBack }) {
           )
         );
       }
+
+      if (msg.type_of_message === 3) {
+        if (msg.sender_id === userId) return;
+
+        const now = Date.now();
+
+        setTypingUsers((prev) => ({
+          ...prev,
+          [msg.sender_id]: now,
+        }));
+}
     };
 
     addHandler(handler);
     return () => removeHandler(handler);
   }, [chat.id, userId]);
+
+
+
+  useEffect(() => {
+  const TYPING_TTL = 700; // 0.7 секунды
+
+  const interval = setInterval(() => {
+    const now = Date.now();
+
+    setTypingUsers((prev) => {
+      const next: TypingMap = {};
+
+      for (const [userId, ts] of Object.entries(prev)) {
+        if (now - ts < TYPING_TTL) {
+          next[Number(userId)] = ts;
+        }
+      }
+
+      return next;
+    });
+  }, 200); // проверяем 5 раз в секунду
+
+  return () => clearInterval(interval);
+}, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -285,6 +325,22 @@ const renderSystemMessage = (m: Message) => {
   );
 };
 
+const sendTyping = () => {
+  const now = Date.now();
+  if (now - lastTypingRef.current < 500) return;
+
+  lastTypingRef.current = now;
+
+  fetchWithAuth(
+    `${API}/chats/${chat.id}/${userId}/typing/`,
+    { method: "POST" }
+  ).catch(() => {});
+};
+
+useEffect(() => {
+  setTypingUsers({});
+}, [chat.id]);
+
   return (
     <div className="min-h-screen flex flex-col bg-white">
       {/* HEADER */}
@@ -405,20 +461,45 @@ const renderSystemMessage = (m: Message) => {
         </div>
       </main>
 
-      {/* INPUT */}
-      <form onSubmit={send} className="border-t bg-white p-4">
-        <div className="max-w-4xl mx-auto flex gap-2 ">
-          <input
-            className="flex-1 border rounded-xl px-4 py-2 focus:ring-2 focus:ring-blue-500 text-black"
-            value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
-            placeholder="Введите сообщение..."
-          />
-          <button className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl">
-            ➤
-          </button>
-        </div>
-      </form>
+      {/* FOOTER */}
+      <div className="border-t bg-white">
+  {/* typing placeholder */}
+  <div className="h-8 mx-4 mt-2">
+    {typingIds.length > 0 && (
+      <div className="px-3 py-1 rounded-md bg-gray-100 text-sm text-gray-600 italic">
+        {typingIds
+          .map((id) => {
+            const u = members.find((x) => x.id === id);
+            return u ? safeName(u) : "Кто-то";
+          })
+          .join(", ")}{" "}
+        печатает…
+      </div>
+    )}
+  </div>
+
+  {/* input */}
+  <form onSubmit={send} className="p-4">
+    <div className="max-w-4xl mx-auto flex gap-2 items-center">
+      <input
+        value={newMessage}
+        onChange={(e) => {
+          setNewMessage(e.target.value);
+          sendTyping();
+        }}
+        placeholder="Введите сообщение..."
+        className="flex-1 border rounded-xl px-4 py-2 text-gray-900
+                   focus:outline-none focus:ring-2 focus:ring-blue-500"
+      />
+      <button
+        type="submit"
+        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl"
+      >
+        ➤
+      </button>
+    </div>
+  </form>
+</div>
 
       {/* PROFILE MODAL */}
       {profileUser && (
