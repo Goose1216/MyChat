@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.app.endpoints.users import users
 from app.app.endpoints.chats import chats
 from app.app.endpoints.messages import messages
+from app.app.endpoints.files import files
 from app.core.config import settings
 from app.logs.config import setup_logging, logger
 
@@ -29,5 +30,6 @@ app.add_middleware(
 app.include_router(users)
 app.include_router(chats)
 app.include_router(messages)
+app.include_router(files)
 
 from app import errors

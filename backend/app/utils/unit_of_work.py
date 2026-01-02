@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from app.repositories import UserRepository, ChatRepository, ChatParticipantRepository, MessageRepository, PrivateChatRepository
+import app.repositories as repo
 from app.db.database import async_session_maker
 
 
@@ -34,11 +34,12 @@ class UnitOfWork(IUnitOfWork):
     async def __aenter__(self):
         self.session = self.session_factory()
 
-        self.user = UserRepository(self.session)
-        self.chat = ChatRepository(self.session)
-        self.chat_private = PrivateChatRepository(self.session)
-        self.chat_participant = ChatParticipantRepository(self.session)
-        self.message = MessageRepository(self.session)
+        self.user = repo.UserRepository(self.session)
+        self.chat = repo.ChatRepository(self.session)
+        self.chat_private = repo.PrivateChatRepository(self.session)
+        self.chat_participant = repo.ChatParticipantRepository(self.session)
+        self.message =repo.MessageRepository(self.session)
+        self.file = repo.FileRepository(self.session)
         return self
 
     async def __aexit__(self, *args):

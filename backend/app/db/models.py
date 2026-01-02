@@ -14,7 +14,6 @@ class ChatType(str, enum.Enum):
     PRIVATE = "private"
     GROUP = "group"
     CHANNEL = "channel"
-    SHARED = "shared"
 
 
 class UserRole(str, enum.Enum):
@@ -104,6 +103,7 @@ class Message(Base):
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages', lazy='joined')
+    files: Mapped['File'] = relationship('File', back_populates='message', lazy='selectin', cascade="all, delete-orphan",)
 
 
 class RefreshTokens(Base):
@@ -117,3 +117,14 @@ class RefreshTokens(Base):
                                             default=lambda: str(uuid.uuid4()))
 
     user = relationship("User", back_populates="refresh_tokens")
+
+
+class  File(Base):
+    __tablename__ = 'files'
+
+    filename: Mapped[str] = mapped_column(String, nullable=True)
+    message_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('messages.id',  ondelete='CASCADE'), nullable=True)
+    url: Mapped[str] = mapped_column(String, nullable=False)
+    path: Mapped[str] = mapped_column(String, nullable=True)
+
+    message: Mapped['Message'] = relationship("Message", back_populates="files")

@@ -1,30 +1,6 @@
-from .message import (
-MessageCreateSchema,
-MessageFromDbSchema,
-MessageDeleteSchema,
-MessageUpdateSchema,
-)
-from .chats import (
-ChatCreateSchema,
-ChatParticipantSchema,
-ChatCreateSchemaForEndpoint,
-ChatSchemaFromBd,
-ChatPrivateCreateSchema,
-ChatParticipantSchemaForAddUser,
-MessageSchema,
-)
-from .users import (
-UserSchemaLogin,
-UserSchemaFromBd,
-UserSchemaRegister,
-Tokens,
-UserSchemaPatch,
-UserChangePassword,
-UserSchemaFromBdStatistic,
-)
-from .response import (
-Response,
-Error,
-Paginator,
-
-)
+from .file import *
+from .chats import *
+from .users import *
+from .message import *
+from .sql_to_pydantic import *
+from .response import *

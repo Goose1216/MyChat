@@ -17,23 +17,6 @@ class ChatCreateSchemaForEndpoint(BaseModel):
     title: str | None = None
     description: str | None = None
 
-    # @model_validator(mode='before')
-    # def check_user2_id(cls, data):
-    #     chat_type = data.get('chat_type')
-    #     user2_id = data.get('user2_id')
-    #     if chat_type == ChatType.PRIVATE and user2_id is None:
-    #         raise ValueError('user2_id must be provided for private chats')
-    #     if chat_type != ChatType.PRIVATE and user2_id is not None:
-    #         raise ValueError('user2_id should be None for non-private chats')
-    #     return data
-    #
-    # @model_validator(mode='before')
-    # def check_title(cls, data):
-    #     title = data.get("title")
-    #     chat_type = data.get('chat_type')
-    #     if title is None and chat_type != ChatType.PRIVATE:
-    #         raise ValueError('need title for not private chat')
-    #     return data
 
 class ChatPrivateCreateSchema(BaseModel):
     chat_id: int
