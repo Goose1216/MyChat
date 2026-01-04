@@ -9,6 +9,8 @@ from app.utils.unit_of_work import IUnitOfWork
 from app.exceptions import InaccessibleEntity, UnfoundEntity
 from app.utils.FileStorage import LocalFileStorage
 from app.core.config import settings
+from app.utils import manager
+
 
 class FileService:
     def __init__(self, uow: IUnitOfWork, storage: LocalFileStorage):
@@ -18,20 +20,10 @@ class FileService:
     async def get_one(self, pk: int):
         async with self.uow as uow:
             file = await uow.file.get_one(pk)
+            if not file:
+                raise UnfoundEntity(message="Файл не найден")
             file_for_return = schemas.FileGettingFromDbSchema.model_validate(file)
             return file_for_return
-
-    async def get_one_with_path(self, pk: int):
-        async with self.uow as uow:
-            file = await uow.file.get_one(pk)
-            file_for_return = schemas.FileGettingFromDbWithPathSchema.model_validate(file)
-            return file_for_return
-
-    async def get_all_for_message(self, message_id: int):
-        async with self.uow as uow:
-            files = await uow.file.get_by(message_id=message_id)
-            files_for_return = [schemas.FileGettingFromDbSchema.model_validate(file) for file in files]
-            return files_for_return
 
     def _create_path(self, chat_id: int | None = None, filename: str | None = None) -> Path:
         if filename is None:
@@ -63,7 +55,6 @@ class FileService:
             filename=filename,
             chat_id=chat_id,
         )
-
         async with self.uow as uow:
             file_schema = schemas.FileCreateSchema.model_validate({
                 "message_id": message.id if message else None,
@@ -77,12 +68,15 @@ class FileService:
             file_for_return = schemas.FileGettingFromDbSchema.model_validate(file)
             await uow.commit()
 
-
             await self.storage.save(
                 path=path,
                 stream=stream,
                 filename=filename,
                 chat_id=chat_id,
+            )
+
+            await manager.broadcast(
+
             )
 
             return file_for_return

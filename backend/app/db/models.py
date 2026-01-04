@@ -103,7 +103,7 @@ class Message(Base):
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages', lazy='joined')
-    files: Mapped['File'] = relationship('File', back_populates='message', lazy='selectin', cascade="all, delete-orphan",)
+    file: Mapped['File'] = relationship('File', back_populates='message', cascade="all, delete-orphan", uselist=False)
 
 
 class RefreshTokens(Base):
@@ -123,8 +123,8 @@ class  File(Base):
     __tablename__ = 'files'
 
     filename: Mapped[str] = mapped_column(String, nullable=True)
-    message_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('messages.id',  ondelete='CASCADE'), nullable=True)
+    message_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('messages.id',  ondelete='CASCADE'), nullable=True, unique=True)
     url: Mapped[str] = mapped_column(String, nullable=False)
     path: Mapped[str] = mapped_column(String, nullable=True)
 
-    message: Mapped['Message'] = relationship("Message", back_populates="files")
+    message: Mapped['Message'] = relationship("Message", back_populates="file", single_parent=True)

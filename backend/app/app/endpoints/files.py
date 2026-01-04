@@ -1,6 +1,5 @@
-from fastapi import APIRouter, UploadFile, File, Depends, HTTPException
+from fastapi import APIRouter, UploadFile, File, Depends
 from fastapi.responses import FileResponse
-from typing import List
 
 from app.services.file import FileService
 from app.services import MessageService
@@ -54,8 +53,6 @@ async def get_file(
     access_token=Depends(security.decode_jwt_access),
 ):
     file = await service.get_one(file_id)
-    if not file:
-        raise UnfoundEntity(message="Файл не найден")
 
     return schemas.Response(data=file)
 
@@ -80,7 +77,7 @@ async def download_file(
     file_id: int,
     service: FileService = Depends(get_file_service),
 ):
-    file = await service.get_one_with_path(file_id)
+    file = await service.get_one(file_id)
     if not file:
         raise UnfoundEntity(message="Файл не найден")
 
@@ -91,17 +88,3 @@ async def download_file(
         filename=file.filename,
         media_type="application/octet-stream",
     )
-
-#@files.get(
-#    "/message/{message_id}/",
-#    response_model=schemas.Response[List[schemas.FileGettingFromDbSchema]],
-#    name="Получение всех файлов сообщения"
-#)
-async def get_files_for_message(
-    message_id: int,
-    service: FileService = Depends(get_file_service),
-    access_token=Depends(security.decode_jwt_access),
-):
-    files = await service.get_files_for_message(message_id)
-    return schemas.Response(data=files)
-

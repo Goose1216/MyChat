@@ -12,7 +12,7 @@ class Config(BaseSettings):
     PROJECT_NAME: str
 
     FILE_STORAGE_PATH: str = "/files/"
-    API_BASE_URL: str = "http://localhost:8000/"
+    API_BASE_URL: str = "http://localhost:8000"
 
     @property
     def ASYNC_DATABASE_URL(self):
