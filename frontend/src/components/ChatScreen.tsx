@@ -10,6 +10,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
   type TypingMap = Record<number, number>; // user_id -> last_seen_ts
   const [typingUsers, setTypingUsers] = useState<TypingMap>({});
   const typingIds = Object.keys(typingUsers).map(Number);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
   const lastTypingRef = useRef<number>(0);
 
@@ -45,20 +46,21 @@ export default function ChatScreen({ userId, chat, onBack }) {
       const res = await fetchWithAuth(`${API}/chats/${chat.id}/messages`);
       const data = await res.json();
 
-      setMessages(
-        (data.data || []).map((m: any) => ({
-          id: m.id,
-          chat_id: m.chat_id,
-          sender_id: m.sender_id,
-          text: m.content,
-          timestamp: m.updated_at || m.created_at,
-          is_deleted: m.is_deleted,
-          sender: m.sender,
-          is_self: m.sender_id !== null && m.sender_id === userId,
-          is_system: m.sender_id === null,
-          edited: m.updated_at !== m.created_at,
-        }))
-      );
+    setMessages(
+      (data.data || []).map((m: any) => ({
+        id: m.id,
+        chat_id: m.chat_id,
+        sender_id: m.sender_id,
+        text: m.content,
+        file: m.file ?? null,
+        timestamp: m.updated_at || m.created_at,
+        is_deleted: m.is_deleted,
+        sender: m.sender,
+        is_self: m.sender_id === userId,
+        is_system: m.sender_id === null,
+        edited: m.updated_at !== m.created_at,
+      }))
+    );
 
       const mRes = await fetchWithAuth(`${API}/chats/${chat.id}/members`);
       const mData = await mRes.json();
@@ -78,7 +80,8 @@ export default function ChatScreen({ userId, chat, onBack }) {
             id: msg.message_id,
             chat_id: msg.chat_id,
             sender_id: msg.sender_id,
-            text: msg.text,
+            text: msg.text ?? null,
+            file: msg.file ?? null,
             timestamp: msg.created_at,
             is_deleted: msg.is_deleted,
             sender: msg.sender,
@@ -177,6 +180,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
   // ================= EDIT MESSAGE =================
   const startEdit = (m: any) => {
     if (!m.is_self) return;
+    if (m.file) return;
     setEditingId(m.id);
     setEditingText(m.text);
   };
@@ -277,43 +281,44 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
 
 const renderMessageContent = (m: Message) => {
-    if (m.is_deleted) {
-      return (
-        <span className="italic text-gray-700 select-none">
-          Сообщение удалено
-        </span>
-      );
-    }
-
-    if (editingId === m.id) {
-      return (
-        <div className="flex gap-2">
-          <input
-            className="flex-1 border rounded px-2 py-1 text-white"
-            value={editingText}
-            onChange={(e) => setEditingText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") saveEdit();
-              if (e.key === "Escape") setEditingId(null);
-            }}
-            autoFocus
-          />
-          <button
-            onClick={saveEdit}
-            className="bg-green-600 text-white px-2 rounded"
-          >
-            ✓
-          </button>
-        </div>
-      );
-    }
-
+  if (m.is_deleted) {
     return (
-      <div onDoubleClick={() => startEdit(m)}>
-        {m.text}
+      <span className="italic text-gray-700 select-none">
+        Сообщение удалено
+      </span>
+    );
+  }
+
+  if (m.file) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="text-sm font-medium">
+          📎 {m.file.filename}
+        </div>
+        <a
+          href={m.file.url}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-blue-600 underline text-xs"
+        >
+          Скачать
+        </a>
       </div>
     );
-  };
+  }
+
+  if (editingId === m.id) {
+    return (
+      <input
+        className="flex-1 border rounded px-2 py-1"
+        value={editingText}
+        onChange={(e) => setEditingText(e.target.value)}
+      />
+    );
+  }
+
+  return <div onDoubleClick={() => startEdit(m)}>{m.text}</div>;
+};
 
 const renderSystemMessage = (m: Message) => {
   return (
@@ -323,6 +328,28 @@ const renderSystemMessage = (m: Message) => {
       </span>
     </div>
   );
+};
+
+const sendFile = async () => {
+  if (!selectedFile) return;
+
+  const form = new FormData();
+  form.append("file", selectedFile);
+  try {
+
+
+    await fetchWithAuth(
+        `${API}/messages/${chat.id}/file/`,
+        {
+          method: "POST",
+          body: form,
+        }
+    );
+
+    setSelectedFile(null);
+  } catch {
+  alert("Не удалось отправить файл");
+}
 };
 
 const sendTyping = () => {
@@ -479,26 +506,65 @@ useEffect(() => {
   </div>
 
   {/* input */}
-  <form onSubmit={send} className="p-4">
-    <div className="max-w-4xl mx-auto flex gap-2 items-center">
-      <input
-        value={newMessage}
-        onChange={(e) => {
-          setNewMessage(e.target.value);
-          sendTyping();
-        }}
-        placeholder="Введите сообщение..."
-        className="flex-1 border rounded-xl px-4 py-2 text-gray-900
-                   focus:outline-none focus:ring-2 focus:ring-blue-500"
-      />
-      <button
-        type="submit"
-        className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl"
-      >
-        ➤
-      </button>
-    </div>
-  </form>
+<form
+  onSubmit={(e) => {
+    e.preventDefault();
+    if (selectedFile) {
+      sendFile();
+    } else {
+      send(e);
+    }
+  }}
+  className="p-4"
+>
+  <div className="max-w-4xl mx-auto flex gap-2 items-center">
+
+    {/* FILE INPUT (скрытый) */}
+    <input
+      type="file"
+      id="file-input"
+      className="hidden"
+      onChange={(e) => {
+        const f = e.target.files?.[0];
+        if (f) setSelectedFile(f);
+      }}
+    />
+
+    {/* FILE BUTTON */}
+    <label
+      htmlFor="file-input"
+      className="cursor-pointer text-xl px-2 select-none"
+      title="Прикрепить файл"
+    >
+      📎
+    </label>
+
+    {/* TEXT INPUT */}
+    <input
+      value={newMessage}
+      onChange={(e) => {
+        setNewMessage(e.target.value);
+        sendTyping();
+      }}
+      placeholder={
+        selectedFile
+          ? `Файл: ${selectedFile.name}`
+          : "Введите сообщение..."
+      }
+      disabled={!!selectedFile}
+      className="flex-1 border rounded-xl px-4 py-2 text-gray-900
+                 focus:outline-none focus:ring-2 focus:ring-blue-500"
+    />
+
+    {/* SEND */}
+    <button
+      type="submit"
+      className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-xl"
+    >
+      ➤
+    </button>
+  </div>
+</form>
 </div>
 
       {/* PROFILE MODAL */}

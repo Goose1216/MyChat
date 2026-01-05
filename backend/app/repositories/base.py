@@ -45,9 +45,10 @@ class Repository(ABC):
         self.session = session
 
     async def add_one(self, data: dict):
-        stmt = insert(self.model).values(**data).returning(self.model)
-        res = await self.session.execute(stmt)
-        return res.scalar_one()
+        obj = self.model(**data)
+        self.session.add(obj)
+        await self.session.flush()
+        return obj
 
     async def get_all(self):
         stmt = select(self.model)

@@ -36,7 +36,7 @@ class FileService:
         if chat_id is None:
             path = Path(datetime_ / filename)
         else:
-            chat_id = Path(chat_id)
+            chat_id = Path(str(chat_id))
             path = Path(chat_id / datetime_ / filename)
 
         return path
@@ -48,9 +48,9 @@ class FileService:
             self,
             stream: BinaryIO,
             message: schemas.MessageFromDbSchema | None = None,
+            chat_id: int | None = None,
             filename: str | None = None,
     ) -> schemas.FileGettingFromDbSchema:
-        chat_id = str(message.chat_id) if message else None
         path = self._create_path(
             filename=filename,
             chat_id=chat_id,
@@ -73,10 +73,6 @@ class FileService:
                 stream=stream,
                 filename=filename,
                 chat_id=chat_id,
-            )
-
-            await manager.broadcast(
-
             )
 
             return file_for_return

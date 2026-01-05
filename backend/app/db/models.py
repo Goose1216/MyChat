@@ -1,4 +1,3 @@
-from wsgiref.simple_server import server_version
 
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME
@@ -103,7 +102,7 @@ class Message(Base):
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages', lazy='joined')
-    file: Mapped['File'] = relationship('File', back_populates='message', cascade="all, delete-orphan", uselist=False)
+    file: Mapped['File'] = relationship('File', back_populates='message', cascade="all, delete-orphan", uselist=False, lazy='joined')
 
 
 class RefreshTokens(Base):

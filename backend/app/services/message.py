@@ -1,8 +1,12 @@
+import logging
+
 from app.app import schemas
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.message import MessageCreateSchema, MessageFromDbSchema
 from app.exceptions import InaccessibleEntity, UnfoundEntity
 from app.utils.websocket import manager
+
+logger = logging.getLogger(__name__)
 
 class MessageService:
     def __init__(self, uow: IUnitOfWork):
@@ -33,7 +37,7 @@ class MessageService:
                         detail="Пользователь не состоит в чате"
                     )
 
-            message = await uow.message.add_one({"chat_id":chat_id, 'sender_id':sender_id, 'content':data})
+            message = await uow.message.add_one({"chat_id":chat_id, 'sender_id':sender_id, 'content':data, 'file':None})
             message_for_return = MessageFromDbSchema.model_validate(message)
             await uow.commit()
 

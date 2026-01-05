@@ -1,5 +1,6 @@
 import logging
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile, Path
+import asyncio
 
 from app.services import MessageService, ChatService
 from app.app import schemas
@@ -9,6 +10,8 @@ from app.app.schemas.response import Response
 from app.utils.response import get_responses_description_by_codes
 from app.utils import manager, get_unit_of_work
 from app.exceptions import NotAuthenticated, EntityError, UnfoundEntity, InaccessibleEntity
+from app.utils.file import get_file_service
+from app.services.file import FileService
 
 logger = logging.getLogger(__name__)
 
@@ -82,3 +85,39 @@ async def delete_message(
                             sender=message_for_return.sender.model_dump())
 
     return schemas.Response(data=message_for_return)
+
+@messages.post(
+    "/{chat_id}/file/",
+    response_model=schemas.Response[schemas.MessageFromDbSchema],
+    name="Отправить сообщение С файлом",
+    description="Отправить отдельное сообщениен с файлом",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def upload_file(
+        chat_id: int = Path(...),
+        file: UploadFile = File(...),
+        file_service: FileService = Depends(get_file_service),
+        uow: IUnitOfWork = Depends(get_unit_of_work),
+        access_token=Depends(security.decode_jwt_access),
+):
+    user_id = access_token.get("user_id")
+    chat_service = ChatService(uow)
+    message_service = MessageService(uow)
+
+    message = await message_service.create_message(chat_id=chat_id, data=None, sender_id=user_id)
+    members_chat = await chat_service.get_members(chat_id, return_id=True)
+
+    created_file = await file_service.create(
+        message=message,
+        chat_id=chat_id,
+        stream=file.file,
+        filename=file.filename,
+    )
+    message = await message_service.get_one(message.id)
+
+    await manager.broadcast(type_of_message=0, message=None, chat_id=chat_id, file=created_file.model_dump(),
+                            receivers_id=members_chat, message_id=message.id, sender_id=user_id,
+                            created_at=message.created_at.isoformat(),
+                            updated_at=message.updated_at.isoformat(), sender=message.sender.model_dump())
+
+    return schemas.Response(data=message)

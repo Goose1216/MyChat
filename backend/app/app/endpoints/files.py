@@ -21,21 +21,13 @@ files = APIRouter(
     name="Загрузка файлов",
 )
 async def upload_file(
-    message_id: int | None = None,
     file: UploadFile = File(...),
     service: FileService = Depends(get_file_service),
-    uow: IUnitOfWork = Depends(get_unit_of_work),
     access_token=Depends(security.decode_jwt_access),
 ):
-    message_service = MessageService(uow)
-    message = None
-    if message_id is not None:
-        message = await message_service.get_one(message_id)
-        if not message:
-            raise UnfoundEntity(message="Сообщение не найдено")
 
     created_file = await service.create(
-        message=message,
+        message=None,
         stream=file.file,
         filename=file.filename,
     )

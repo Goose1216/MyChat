@@ -2,6 +2,7 @@ import logging
 
 from fastapi import WebSocket
 from typing import Dict, Set
+from app.app import schemas
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +28,7 @@ class ConnectionManager:
             message: str,
             chat_id: int,
             receivers_id: list[int],
+            file: schemas.FileGettingFromDbSchema | None = None,
             message_id: int | None = None,
             sender_id: int | None = None,
             **kwargs
@@ -42,6 +44,7 @@ class ConnectionManager:
                             "chat_id": chat_id,
                             "sender_id": sender_id,
                             "it_self": receiver_id == sender_id,
+                            "file": file,
                         }
                         for_send_json.update(**kwargs)
                         logger.debug(for_send_json)
