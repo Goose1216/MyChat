@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, UploadFile, File, Depends
 from fastapi.responses import FileResponse
 
@@ -14,6 +16,7 @@ files = APIRouter(
     prefix="/files",
     tags=["Файлы"],
 )
+logger = logging.getLogger(__name__)
 
 @files.post(
     "/upload/",
@@ -74,6 +77,7 @@ async def download_file(
         raise UnfoundEntity(message="Файл не найден")
 
     path = service.storage.get_path(file.path)
+    logger.debug(path)
 
     return FileResponse(
         path=path,
