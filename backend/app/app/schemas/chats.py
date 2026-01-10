@@ -1,7 +1,9 @@
 from pydantic import BaseModel, ConfigDict, model_validator
 from typing import List
+from datetime import datetime
 
 from app.db.models import ChatType, UserRole
+from .message import MessageFromDbSchema
 
 
 class ChatCreateSchema(BaseModel):
@@ -46,15 +48,6 @@ class ChatParticipantSchemaForAddUser(BaseModel):
     chat_id: int
 
 
-class MessageSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    sender_id: int
-    chat_id: int
-    content: str | None = None
-
-
 class ChatSchemaFromBd(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -62,4 +55,8 @@ class ChatSchemaFromBd(BaseModel):
     chat_type: ChatType
     title: str | None = None
     description: str | None = None
+    created_at: datetime
 
+
+class ChatSchemaFromBdWithLastMessage(ChatSchemaFromBd):
+    last_message: MessageFromDbSchema | None = None

@@ -19,6 +19,13 @@ class MessageService:
 
             return message_for_return
 
+    async def get_last_for_chat(self, chat_id: int):
+        async with self.uow as uow:
+            message = await uow.message.get_last_for_chat(chat_id)
+            message_for_return = MessageFromDbSchema.model_validate(message)
+
+            return message_for_return
+
     async def create_message(self, *, chat_id: int, sender_id: int | None = None, data: str | None = None):
         async with self.uow as uow:
             chat = await uow.chat.get_one(pk=chat_id)

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import CreateChatScreen from "./CreateChatScreen";
 import { fetchWithAuth } from "../api";
+import { useWebSocket } from "../Websocket";
 
 export default function ChatsListScreen({
   access_token,
@@ -18,6 +19,7 @@ export default function ChatsListScreen({
   const [chats, setChats] = useState<any[]>([]);
   const [showCreateChat, setShowCreateChat] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { addHandler, removeHandler } = useWebSocket();
 
   const fetchChats = async () => {
     if (!access_token) return;
@@ -47,6 +49,70 @@ export default function ChatsListScreen({
   useEffect(() => {
     fetchChats();
   }, []);
+
+  const getLastMessagePreview = (chat: any) => {
+  const msg = chat.last_message;
+  if (!msg) return "Нет сообщений";
+
+  const senderName =
+    msg.sender && msg.sender.id !== userId
+      ? `${msg.sender.username}: `
+      : "Вы: ";
+
+  if (msg.content) {
+    const text =
+      msg.content.length > 15
+        ? msg.content.slice(0, 15) + "…"
+        : msg.content;
+
+    return senderName + text;
+  }
+
+  if (msg.file) {
+    const name =
+      msg.file.filename.length > 15
+        ? msg.file.filename.slice(0, 15) + "…"
+        : msg.file.filename;
+
+    return senderName + `Файл: ${name}`;
+  }
+
+  return "Нет сообщений";
+};
+
+  const updateChatLastMessage = (wsMsg: any) => {
+  if (wsMsg.type_of_message !== 0) return;
+
+  setChats((prev) => {
+    const idx = prev.findIndex((c) => c.id === wsMsg.chat_id);
+    if (idx === -1) return prev;
+
+    const updatedChat = {
+      ...prev[idx],
+      last_message: {
+        chat_id: wsMsg.chat_id,
+        sender_id: wsMsg.sender_id,
+        content: wsMsg.text ?? null,
+        file: wsMsg.file ?? null,
+        created_at: wsMsg.created_at,
+        updated_at: wsMsg.created_at,
+        sender: wsMsg.sender,
+        is_deleted: false,
+      },
+    };
+
+    // переносим чат вверх
+    const next = [...prev];
+    next.splice(idx, 1);
+
+    return [updatedChat, ...next];
+  });
+};
+
+useEffect(() => {
+  addHandler(updateChatLastMessage);
+  return () => removeHandler(updateChatLastMessage);
+}, []);
 
   const handleChatCreated = () => {
     setShowCreateChat(false);
@@ -111,9 +177,12 @@ export default function ChatsListScreen({
                     </div>
                     {chat.description && (
                       <div className="text-sm text-gray-600 mt-1">
-                        {chat.description}
+                        Описание: {chat.description}
                       </div>
                     )}
+                    <div className="text-sm text-gray-500 mt-1">
+                      {getLastMessagePreview(chat)}
+                    </div>
                   </div>
                 </li>
               ))}

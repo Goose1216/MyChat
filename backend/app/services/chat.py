@@ -1,10 +1,12 @@
+import datetime
 import logging
 from sqlalchemy.exc import IntegrityError
 
 from app.utils.unit_of_work import IUnitOfWork
 from app.app.schemas.users import UserSchemaRegister, UserSchemaFromBd
-from app.app.schemas.chats import (ChatCreateSchema, ChatParticipantSchema, MessageSchema,
-                                   ChatSchemaFromBd, ChatPrivateCreateSchema, ChatParticipantSchemaForAddUser)
+from app.app.schemas.chats import (ChatCreateSchema, ChatParticipantSchema,
+                                   ChatSchemaFromBd, ChatPrivateCreateSchema, ChatParticipantSchemaForAddUser,
+                                   ChatSchemaFromBdWithLastMessage)
 from app.app.schemas.message import MessageFromDbSchema
 from app.db.models import ChatType, Message, Chat, ChatParticipant
 from app.exceptions import NotAuthenticated, InaccessibleEntity, UnprocessableEntity, EntityError, DuplicateEntity, UnfoundEntity
@@ -132,6 +134,32 @@ class ChatService:
             chats = await uow.chat.get_all_for_user(user_id)
             chats_for_return = [ChatSchemaFromBd.model_validate(chat) for chat in chats]
             return chats_for_return
+
+    async def get_all_for_user_with_last_message(self, user_id: int):
+        async with self.uow as uow:
+            user = await uow.user.get_one_by(id=user_id)
+            if not user:
+                raise UnfoundEntity(detail="Такого пользователя нет")
+
+            chats = await uow.chat.get_all_for_user(user_id)
+            chats_for_return = []
+            for chat in chats:
+                last_message = await uow.message.get_last_for_chat(chat.id)
+
+                chat = ChatSchemaFromBd.model_validate(chat)
+                chat = chat.model_dump()
+                chat['last_message'] = last_message
+
+                chats_for_return.append(ChatSchemaFromBdWithLastMessage.model_validate(chat))
+
+            def chat_sort_key(chat):
+                if chat.last_message:
+                    return max(chat.created_at, chat.last_message.created_at)
+                return chat.created_at
+
+            chats_for_return.sort(key=chat_sort_key, reverse=True)
+            return chats_for_return
+
 
     async def get_all_message_for_chat(self, *, chat_id: int):
         chat = await self.get_one_by(id=chat_id)

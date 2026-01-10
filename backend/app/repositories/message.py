@@ -14,3 +14,12 @@ class MessageRepository(Repository):
         )
         res = await self.session.execute(stmt)
         return res.scalars().all()
+
+    async def get_last_for_chat(self, chat_id: int):
+        stmt = (
+            select(self.model)
+            .where(self.model.chat_id == chat_id, self.model.is_deleted == False)
+            .order_by(self.model.created_at.desc())
+        )
+        res = await self.session.execute(stmt)
+        return res.scalars().first()

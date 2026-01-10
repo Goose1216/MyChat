@@ -84,7 +84,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 @chats.get(
     '/',
-    response_model=schemas.Response[List[schemas.ChatSchemaFromBd]],
+    response_model=schemas.Response[List[schemas.ChatSchemaFromBdWithLastMessage]],
     name="Получить все чаты для пользователя",
     responses = get_responses_description_by_codes([401, 403])
 )
@@ -94,7 +94,7 @@ async def get_all_chat_for_user(
 ):
     user_id = access_token.get("user_id")
     chat_service = ChatService(uow)
-    chat = await chat_service.get_all_for_user(user_id)
+    chat = await chat_service.get_all_for_user_with_last_message(user_id)
     return schemas.Response(data=chat)
 
 @chats.get(

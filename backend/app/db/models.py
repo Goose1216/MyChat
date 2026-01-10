@@ -51,6 +51,7 @@ class Chat(Base):
 
     participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat', lazy='selectin', cascade="all, delete-orphan",)
     messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan", lazy='selectin')
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     private_chat: Mapped[Optional["PrivateChat"]] = relationship('PrivateChat', uselist=False, back_populates='chat')
 
