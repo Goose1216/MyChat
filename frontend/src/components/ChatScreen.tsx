@@ -307,15 +307,31 @@ const renderMessageContent = (m: Message) => {
     );
   }
 
-  if (editingId === m.id) {
-    return (
-      <input
-        className="flex-1 border rounded px-2 py-1"
-        value={editingText}
-        onChange={(e) => setEditingText(e.target.value)}
-      />
-    );
-  }
+if (editingId === m.id) {
+  return (
+    <input
+      className="flex-1 border rounded px-2 py-1 "
+      value={editingText}
+      autoFocus
+      onChange={(e) => setEditingText(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          saveEdit();
+        }
+
+        if (e.key === "Escape") {
+          setEditingId(null);
+          setEditingText("");
+        }
+      }}
+      onBlur={() => {
+        setEditingId(null);
+        setEditingText("");
+      }}
+    />
+  );
+}
 
   return <div onDoubleClick={() => startEdit(m)}>{m.text}</div>;
 };
