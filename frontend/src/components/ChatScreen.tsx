@@ -11,8 +11,15 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const [typingUsers, setTypingUsers] = useState<TypingMap>({});
   const typingIds = Object.keys(typingUsers).map(Number);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
+  const initialScrollDoneRef = useRef(false);
+  const scrollOnSendRef = useRef(false);
 
   const lastTypingRef = useRef<number>(0);
+  const lastSentReadRef = useRef<number>(0);
+  const lastReadMessageIdRef = useRef<number>(0);
+
+  const [someoneReadUpTo, setSomeoneReadUpTo] = useState<number>(0);
 
   // === added from old version ===
   const [profileUser, setProfileUser] = useState<any | null>(null);
@@ -134,14 +141,17 @@ export default function ChatScreen({ userId, chat, onBack }) {
           ...prev,
           [msg.sender_id]: now,
         }));
-}
-    };
+      }
 
+      if (msg.type_of_message === 4) {
+        setSomeoneReadUpTo((prev) =>
+          Math.max(prev, msg.last_read_message_id)
+        );
+      }
+}
     addHandler(handler);
     return () => removeHandler(handler);
   }, [chat.id, userId]);
-
-
 
   useEffect(() => {
   const TYPING_TTL = 700; // 0.7 секунды
@@ -165,17 +175,23 @@ export default function ChatScreen({ userId, chat, onBack }) {
   return () => clearInterval(interval);
 }, []);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
 
   // ================= SEND =================
   const send = (e) => {
     e.preventDefault();
     if (!newMessage.trim()) return;
+
+    scrollOnSendRef.current = true;
     sendMessage({ chat_id: chat.id, text: newMessage });
     setNewMessage("");
   };
+
+  useEffect(() => {
+  if (!scrollOnSendRef.current) return;
+
+  bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  scrollOnSendRef.current = false;
+}, [messages]);
 
   // ================= EDIT MESSAGE =================
   const startEdit = (m: any) => {
@@ -346,6 +362,28 @@ const renderSystemMessage = (m: Message) => {
   );
 };
 
+useEffect(() => {
+  const onScroll = () => {
+    const now = Date.now();
+    if (now - lastSentReadRef.current < 1000) return;
+
+    const lastVisible = getLastVisibleForeignMessageId();
+    if (!lastVisible) return;
+
+    if (lastVisible <= lastReadMessageIdRef.current) return;
+
+    lastReadMessageIdRef.current = lastVisible;
+    lastSentReadRef.current = now;
+
+    fetchWithAuth(`${API}/messages/read/${lastVisible}/`, {
+      method: "POST",
+    }).catch(() => {});
+  };
+
+  window.addEventListener("scroll", onScroll);
+  return () => window.removeEventListener("scroll", onScroll);
+}, [messages, userId]);
+
 const sendFile = async () => {
   if (!selectedFile) return;
 
@@ -380,9 +418,46 @@ const sendTyping = () => {
   ).catch(() => {});
 };
 
+const getLastVisibleForeignMessageId = () => {
+  let lastVisibleId: number | null = null;
+
+  for (const m of messages) {
+    if (m.sender_id === userId) continue;
+
+    const el = messageRefs.current[m.id];
+    if (!el) continue;
+
+    const rect = el.getBoundingClientRect();
+    if (rect.bottom <= window.innerHeight) {
+      lastVisibleId = m.id;
+    }
+  }
+
+  return lastVisibleId;
+};
+
+useEffect(() => {
+  if (initialScrollDoneRef.current) return;
+  if (!messages.length) return;
+
+  if (chat.last_read_message_id) {
+    const el = messageRefs.current[chat.last_read_message_id];
+    if (el) {
+      el.scrollIntoView({ block: "center" });
+    } else {
+      bottomRef.current?.scrollIntoView();
+    }
+  } else {
+    bottomRef.current?.scrollIntoView();
+  }
+
+  initialScrollDoneRef.current = true;
+}, [messages, chat.id]);
+
 useEffect(() => {
   setTypingUsers({});
 }, [chat.id]);
+
 
   return (
     <div className="min-h-screen flex flex-col bg-white">
@@ -444,6 +519,7 @@ useEffect(() => {
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto p-4">
           {messages.map((m) => {
+            const isReadBySomeone = m.id <= someoneReadUpTo;
   // ===== SYSTEM MESSAGE =====
   if (m.is_system) {
     return (
@@ -453,14 +529,18 @@ useEffect(() => {
     );
   }
 
+
+
   // ===== USER MESSAGE =====
   return (
     <div
       key={m.id}
+      ref={(el) => (messageRefs.current[m.id] = el)}
       className={`flex mb-3 ${
         m.is_self ? "justify-end" : "justify-start"
       }`}
     >
+
       {!m.is_self && (
         <div
           className={`w-11 h-11 mr-3 rounded-full flex items-center justify-center text-white font-bold ${avatarColor(
@@ -492,10 +572,17 @@ useEffect(() => {
           </button>
         )}
 
-        <div className="text-xs opacity-70 mt-1 text-right">
-          {formatDateTime(m.timestamp)}
-          {!m.is_deleted && m.edited && " · изменено"}
-        </div>
+        <div className="text-xs opacity-70 mt-1 text-right flex gap-1 justify-end items-center">
+        <span>{formatDateTime(m.timestamp)}</span>
+
+        {!m.is_deleted && m.edited && <span>· изменено</span>}
+
+        {m.is_self && (
+          <span className="ml-1">
+            {isReadBySomeone ? "✔✔" : "✔"}
+          </span>
+        )}
+      </div>
       </div>
     </div>
   );

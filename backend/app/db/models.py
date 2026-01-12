@@ -62,6 +62,7 @@ class ChatParticipant(Base):
     chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id'), nullable=False)
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=False)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.MEMBER)
+    last_read_message_id: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default='0')
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='participants')
     user: Mapped['User'] = relationship('User', back_populates='chat_participants')

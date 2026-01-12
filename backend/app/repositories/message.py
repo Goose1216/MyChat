@@ -1,4 +1,4 @@
-from sqlalchemy import insert, select, update, delete, or_, and_
+from sqlalchemy import insert, select, update, delete, or_, and_, func
 
 from .base import Repository
 from app.db.models import Message
@@ -23,3 +23,17 @@ class MessageRepository(Repository):
         )
         res = await self.session.execute(stmt)
         return res.scalars().first()
+
+    async def get_unread_count(self, last_read_message_id: int, user_id: int, chat_id: int):
+        stmt = (
+            select(func.count())
+            .select_from(self.model)
+            .where(
+                self.model.chat_id == chat_id,
+                self.model.id > last_read_message_id,
+                self.model.sender_id != user_id,
+                self.model.is_deleted.is_(False),
+            )
+        )
+        res = await self.session.execute(stmt)
+        return res.scalar_one()

@@ -1,6 +1,5 @@
 import logging
 from fastapi import APIRouter, Depends, File, UploadFile, Path
-import asyncio
 
 from app.services import MessageService, ChatService
 from app.app import schemas
@@ -85,6 +84,28 @@ async def delete_message(
                             sender=message_for_return.sender.model_dump())
 
     return schemas.Response(data=message_for_return)
+
+@messages.post(
+    "/read/{message_id}/",
+    response_model=schemas.Response[None],
+    name="Обновить последнее прочитанное сообщение",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def update_read_message(
+                        message_id: int,
+                        access_token = Depends(security.decode_jwt_access),
+                        uow: IUnitOfWork = Depends(get_unit_of_work)
+):
+    chat_service = ChatService(uow)
+    message_service = MessageService(uow)
+
+    await chat_service.update_last_message_read(user_id=access_token.get("user_id"), message_id=message_id)
+    message = await message_service.get_one(pk=message_id)
+
+    await manager.broadcast(type_of_message=4, message=None, chat_id=message.chat_id,
+                            receivers_id=(message.sender_id, ), last_read_message_id=message_id)
+
+    return schemas.Response(data=None)
 
 @messages.post(
     "/{chat_id}/file/",

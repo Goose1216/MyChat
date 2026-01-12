@@ -1,4 +1,3 @@
-import datetime
 import logging
 from sqlalchemy.exc import IntegrityError
 
@@ -135,6 +134,7 @@ class ChatService:
             chats_for_return = [ChatSchemaFromBd.model_validate(chat) for chat in chats]
             return chats_for_return
 
+
     async def get_all_for_user_with_last_message(self, user_id: int):
         async with self.uow as uow:
             user = await uow.user.get_one_by(id=user_id)
@@ -145,10 +145,18 @@ class ChatService:
             chats_for_return = []
             for chat in chats:
                 last_message = await uow.message.get_last_for_chat(chat.id)
+                chat_participant = await uow.chat_participant.get_one_by(chat_id=chat.id, user_id=user_id)
+                last_read_message_id = chat_participant.last_read_message_id
 
                 chat = ChatSchemaFromBd.model_validate(chat)
                 chat = chat.model_dump()
                 chat['last_message'] = last_message
+                chat['last_read_message_id'] = last_read_message_id
+                cnt_unread_messages = await uow.message.get_unread_count(
+                            last_read_message_id=chat_participant.last_read_message_id,
+                            user_id=chat_participant.user_id,
+                            chat_id=chat_participant.chat_id,)
+                chat['cnt_unread_messages'] = int(cnt_unread_messages)
 
                 chats_for_return.append(ChatSchemaFromBdWithLastMessage.model_validate(chat))
 
@@ -160,6 +168,16 @@ class ChatService:
             chats_for_return.sort(key=chat_sort_key, reverse=True)
             return chats_for_return
 
+    async def update_last_message_read(self, user_id: int, message_id: int) -> None:
+        async with self.uow as uow:
+            message = await uow.message.get_one(pk=message_id)
+            if not message:
+                raise UnfoundEntity(detail="Такое сообщение не найдено")
+            chat_participant = await uow.chat_participant.get_one_by(chat_id=message.chat_id, user_id=user_id)
+            if not chat_participant:
+                raise UnfoundEntity(detail = "Пользователь не состоит в этом чате")
+            chat_participant.last_read_message_id = message_id
+            await uow.commit()
 
     async def get_all_message_for_chat(self, *, chat_id: int):
         chat = await self.get_one_by(id=chat_id)
@@ -173,6 +191,10 @@ class ChatService:
             return messages_for_return
 
     async def get_all_message_for_chat_for_member(self, *, chat_id: int, member_id: int):
+        chat = await self.get_one_by(id=chat_id)
+        if not chat:
+            raise UnfoundEntity(detail="Чат не найден")
+
         user_in_chat = await self.check_user_in_chat(user_id=member_id, chat_id=chat_id)
         if not user_in_chat:
             raise InaccessibleEntity(detail="Пользователь не состоит в чате")
