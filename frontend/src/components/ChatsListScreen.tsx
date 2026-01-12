@@ -87,8 +87,12 @@ export default function ChatsListScreen({
     const idx = prev.findIndex((c) => c.id === wsMsg.chat_id);
     if (idx === -1) return prev;
 
+    const chat = prev[idx];
+
+    const isForeign = wsMsg.sender_id !== userId;
+
     const updatedChat = {
-      ...prev[idx],
+      ...chat,
       last_message: {
         chat_id: wsMsg.chat_id,
         sender_id: wsMsg.sender_id,
@@ -99,9 +103,11 @@ export default function ChatsListScreen({
         sender: wsMsg.sender,
         is_deleted: false,
       },
+      cnt_unread_messages: isForeign
+        ? Math.min((chat.cnt_unread_messages ?? 0) + 1, 99)
+        : chat.cnt_unread_messages,
     };
 
-    // переносим чат вверх
     const next = [...prev];
     next.splice(idx, 1);
 
@@ -166,25 +172,30 @@ useEffect(() => {
                 <li
                   key={chat.id}
                   onClick={() => onSelectChat(chat)}
-                  className="p-4 hover:bg-blue-50 rounded-lg cursor-pointer transition flex justify-between items-center"
+                  className="p-4 hover:bg-blue-50 rounded-lg cursor-pointer transition
+                             flex justify-between items-center"
                 >
                   <div>
                     <div className="text-lg font-semibold text-gray-800">
                       {chat.title || `Чат #${chat.id}`}
                     </div>
-                    <div className="text-sm text-gray-500">
-                      Тип: {chat.chat_type}
-                    </div>
-                    {chat.description && (
-                      <div className="text-sm text-gray-600 mt-1">
-                        Описание: {chat.description}
-                      </div>
-                    )}
+
                     <div className="text-sm text-gray-500 mt-1">
                       {getLastMessagePreview(chat)}
                     </div>
                   </div>
-                </li>
+
+                  {chat.cnt_unread_messages > 0 && (
+                    <div
+                      className="ml-4 min-w-[28px] h-7 px-2
+                                 flex items-center justify-center
+                                 bg-blue-600 text-white text-xs font-semibold
+                                 rounded-full"
+                    >
+                      {chat.cnt_unread_messages > 99 ? "99+" : chat.cnt_unread_messages}
+                    </div>
+                  )}
+</li>
               ))}
             </ul>
           )}
