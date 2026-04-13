@@ -40,6 +40,8 @@ class UnitOfWork(IUnitOfWork):
         self.chat_participant = repo.ChatParticipantRepository(self.session)
         self.message =repo.MessageRepository(self.session)
         self.file = repo.FileRepository(self.session)
+        self.task = repo.TaskRepository(self.session)
+        self.task_assignment = repo.TaskAssignmentRepository(self.session)
         return self
 
     async def __aexit__(self, *args):

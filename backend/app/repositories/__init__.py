@@ -5,3 +5,5 @@ from .message import MessageRepository
 from .private_chat import PrivateChatRepository
 from .user import UserRepository
 from .file import FileRepository
+from .task import TaskRepository
+from .task_assigment import TaskAssignmentRepository

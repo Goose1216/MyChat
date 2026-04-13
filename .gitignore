@@ -19,5 +19,9 @@ postgres_data
 *.cov
 *.lcov
 
+#my
 КР.pdf
 files
+
+#macos
+.DS_Store

@@ -15,6 +15,8 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const initialScrollDoneRef = useRef(false);
   const scrollOnSendRef = useRef(false);
 
+
+
   const lastTypingRef = useRef<number>(0);
   const lastSentReadRef = useRef<number>(0);
   const lastReadMessageIdRef = useRef<number>(0);
@@ -29,6 +31,17 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const [addUserError, setAddUserError] = useState<string>("");
   const [loadingUsers, setLoadingUsers] = useState(false);
 
+
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskMessageId, setTaskMessageId] = useState<number | null>(null);
+
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDescription, setTaskDescription] = useState("");
+  const [taskAssignees, setTaskAssignees] = useState<number[]>([]);
+
+  const [tasksModalOpen, setTasksModalOpen] = useState(false);
+  const [tasks, setTasks] = useState<any[]>([]);
+  const [loadingTasks, setLoadingTasks] = useState(false);
   // === edit message ===
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -436,6 +449,88 @@ const getLastVisibleForeignMessageId = () => {
   return lastVisibleId;
 };
 
+const [creatingTask, setCreatingTask] = useState(false);
+
+const loadTasks = async () => {
+  setLoadingTasks(true);
+
+  try {
+    const res = await fetchWithAuth(
+      `${API}/tasks/?chat_id=${chat.id}`
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      alert("Ошибка загрузки задач");
+      return;
+    }
+
+    setTasks(data.data || []);
+  } catch {
+    alert("Ошибка сети");
+  } finally {
+    setLoadingTasks(false);
+  }
+};
+
+const createTask = async () => {
+  if (!taskTitle.trim()) {
+    alert("Введите название задачи");
+    return;
+  }
+
+  if (!taskMessageId) {
+    alert("Ошибка: нет message_id");
+    return;
+  }
+
+  if (creatingTask) return;
+
+  setCreatingTask(true);
+
+  try {
+    const res = await fetchWithAuth(`${API}/tasks/`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: taskTitle,
+        description: taskDescription,
+        chat_id: chat.id,
+        message_id: taskMessageId,
+        assignee_ids: taskAssignees,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      const error =
+        data?.description ||
+        data?.errors?.[0]?.message ||
+        "Ошибка создания задачи";
+
+      alert(error);
+      return;
+    }
+
+    // reset state
+    setTaskModalOpen(false);
+    setTaskTitle("");
+    setTaskDescription("");
+    setTaskAssignees([]);
+    setTaskMessageId(null);
+
+    alert("Задача создана");
+  } catch {
+    alert("Ошибка сети");
+  } finally {
+    setCreatingTask(false);
+  }
+};
+
 useEffect(() => {
   if (initialScrollDoneRef.current) return;
   if (!messages.length) return;
@@ -476,6 +571,16 @@ useEffect(() => {
           </span>
 
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => {
+                setTasksModalOpen(true);
+                loadTasks();
+              }}
+              className="text-sm text-purple-600"
+            >
+              📋 Задачи
+            </button>
+
             {chat.chat_type !== "private"  && (
               <button
                 onClick={openAddUserModal}
@@ -562,15 +667,35 @@ useEffect(() => {
       >
         {renderMessageContent(m)}
 
-        {/* ACTIONS */}
-        {m.is_self && !m.is_deleted && (
-          <button
-            onClick={() => deleteMessage(m.id)}
-            className="absolute -top-2 -right-2 hidden group-hover:block text-xs bg-red-600 text-white rounded-full px-1.5"
-          >
-            🗑
-          </button>
-        )}
+      {!m.is_deleted && (
+  <>
+    {/* DELETE */}
+    {m.is_self && (
+      <button
+        onClick={() => deleteMessage(m.id)}
+        className="absolute -top-2 -right-2 hidden group-hover:block text-xs bg-red-600 text-white rounded-full px-1.5"
+      >
+        🗑
+      </button>
+    )}
+
+    {/* CREATE TASK */}
+    <button
+      onClick={() => {
+        setTaskModalOpen(true);
+        setTaskMessageId(m.id);
+        setTaskTitle(m.text || "");
+        setTaskDescription("");
+        setTaskAssignees([]);
+      }}
+      className="absolute -top-2 -left-2 hidden group-hover:block text-xs bg-green-600 text-white rounded-full px-1.5"
+      title="Создать задачу"
+    >
+      📌
+    </button>
+  </>
+)}
+
 
         <div className="text-xs opacity-70 mt-1 text-right flex gap-1 justify-end items-center">
         <span>{formatDateTime(m.timestamp)}</span>
@@ -669,6 +794,128 @@ useEffect(() => {
   </div>
 </form>
 </div>
+  {tasksModalOpen && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-4 rounded w-[500px] max-h-[80vh] overflow-y-auto text-gray-900">
+
+      <div className="flex justify-between items-center mb-3">
+        <h3 className="font-semibold text-lg">
+          Задачи чата #{chat.id}
+        </h3>
+
+        <button
+          onClick={() => setTasksModalOpen(false)}
+          className="text-sm text-gray-500"
+        >
+          ✕
+        </button>
+      </div>
+
+      {loadingTasks && (
+        <div className="text-sm text-gray-500">
+          Загрузка...
+        </div>
+      )}
+
+      {!loadingTasks && tasks.length === 0 && (
+        <div className="text-sm text-gray-500">
+          Нет задач
+        </div>
+      )}
+
+      {!loadingTasks && tasks.map((t) => (
+        <div
+          key={t.id}
+          className="border rounded p-2 mb-2"
+        >
+          <div className="font-medium">
+            {t.title}
+          </div>
+
+          {t.description && (
+            <div className="text-sm text-gray-600">
+              {t.description}
+            </div>
+          )}
+
+          <div className="text-xs text-gray-400 mt-1">
+            Статус: {t.status} | Приоритет: {t.priority}
+          </div>
+        </div>
+      ))}
+
+    </div>
+  </div>
+  )}
+      {taskModalOpen && (
+  <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+    <div className="bg-white p-4 rounded w-96 text-gray-900">
+      <h3 className="font-semibold text-lg mb-3">
+        Создать задачу
+      </h3>
+
+      <input
+        value={taskTitle}
+        onChange={(e) => setTaskTitle(e.target.value)}
+        placeholder="Название"
+        className="w-full border rounded p-2 mb-2"
+      />
+
+      <textarea
+        value={taskDescription}
+        onChange={(e) => setTaskDescription(e.target.value)}
+        placeholder="Описание"
+        className="w-full border rounded p-2 mb-2"
+      />
+
+      <div className="mb-2">
+        <div className="text-sm mb-1">Исполнители:</div>
+
+        {members.map((u) => (
+          <label key={u.id} className="flex gap-2 items-center">
+            <input
+              type="checkbox"
+              checked={taskAssignees.includes(u.id)}
+              onChange={(e) => {
+                if (e.target.checked) {
+                setTaskAssignees((p) =>
+                                p.includes(u.id) ? p : [...p, u.id]
+                              );
+                } else {
+                  setTaskAssignees((p) =>
+                    p.filter((id) => id !== u.id)
+                  );
+                }
+              }}
+            />
+            {safeName(u)}
+          </label>
+        ))}
+      </div>
+
+      <div className="flex justify-end gap-2 mt-3">
+        <button
+          onClick={() => setTaskModalOpen(false)}
+          className="px-3 py-1 bg-gray-200 rounded"
+        >
+          Отмена
+        </button>
+
+        <button
+        onClick={createTask}
+        disabled={!taskTitle.trim() || creatingTask}
+        className={`px-3 py-1 rounded text-white ${
+          creatingTask || !taskTitle.trim()
+            ? "bg-gray-400"
+            : "bg-blue-600"
+        }`}
+      >
+        {creatingTask ? "Создание..." : "Создать"}
+      </button>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* PROFILE MODAL */}
       {profileUser && (

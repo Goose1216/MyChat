@@ -1,10 +1,10 @@
-
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME
 from datetime import datetime
 from typing import Optional, List
 import enum
 import uuid
+from sqlalchemy.dialects.postgresql import UUID
 
 from .database import Base
 
@@ -19,6 +19,20 @@ class UserRole(str, enum.Enum):
     MEMBER = "member"
     ADMIN = "admin"
     OWNER = "owner"
+
+
+class TaskStatus(str, enum.Enum):
+    NEW = "NEW"
+    IN_PROGRESS = "IN_PROGRESS"
+    CANCELLED = "CANCELLED"
+    DONE = "DONE"
+
+
+class TaskPriority(str, enum.Enum):
+    LOW = "LOW"
+    MEDIUM = "MEDIUM"
+    HIGH = "HIGH"
+    CRITICAL = "CRITICAL"
 
 
 class User(Base):
@@ -39,21 +53,35 @@ class User(Base):
         back_populates="user",
         cascade="all, delete-orphan",
     )
+    tasks_created: Mapped[List["Task"]] = relationship(
+        "Task",
+        back_populates="creator",
+    )
+    task_assignments: Mapped[List["TaskAssignment"]] = relationship(
+        "TaskAssignment",
+        back_populates="user",
+    )
 
 
 class Chat(Base):
     __tablename__ = 'chats'
-    
+
     chat_type: Mapped[ChatType] = mapped_column(Enum(ChatType), nullable=False)
     title: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     is_deleted: Mapped[bool] = mapped_column(default=False, server_default="false")
 
-    participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat', lazy='selectin', cascade="all, delete-orphan",)
-    messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan", lazy='selectin')
+    participants: Mapped[List["ChatParticipant"]] = relationship('ChatParticipant', back_populates='chat',
+                                                                 lazy='selectin', cascade="all, delete-orphan", )
+    messages: Mapped[List["Message"]] = relationship('Message', back_populates='chat', cascade="all, delete-orphan",
+                                                     lazy='selectin')
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     private_chat: Mapped[Optional["PrivateChat"]] = relationship('PrivateChat', uselist=False, back_populates='chat')
+    tasks: Mapped[List["Task"]] = relationship(
+        "Task",
+        back_populates="chat",
+    )
 
 
 class ChatParticipant(Base):
@@ -99,12 +127,20 @@ class Message(Base):
     sender_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('users.id'), nullable=True)
     content: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(),
+                                                 onupdate=func.now())
     is_deleted: Mapped[bool] = mapped_column(default=False, server_default="false")
 
     chat: Mapped['Chat'] = relationship('Chat', back_populates='messages')
     sender: Mapped['User'] = relationship('User', back_populates='messages', lazy='joined')
-    file: Mapped['File'] = relationship('File', back_populates='message', cascade="all, delete-orphan", uselist=False, lazy='joined')
+    file: Mapped['File'] = relationship('File', back_populates='message', cascade="all, delete-orphan", uselist=False,
+                                        lazy='joined')
+    task: Mapped[Optional["Task"]] = relationship(
+        "Task",
+        back_populates="message",
+        lazy='joined',
+        uselist=False,
+    )
 
 
 class RefreshTokens(Base):
@@ -120,12 +156,90 @@ class RefreshTokens(Base):
     user = relationship("User", back_populates="refresh_tokens")
 
 
-class  File(Base):
+class File(Base):
     __tablename__ = 'files'
 
     filename: Mapped[str] = mapped_column(String, nullable=True)
-    message_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('messages.id',  ondelete='CASCADE'), nullable=True, unique=True)
+    message_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('messages.id', ondelete='CASCADE'), nullable=True,
+                                            unique=True)
     url: Mapped[str] = mapped_column(String, nullable=False)
     path: Mapped[str] = mapped_column(String, nullable=True)
 
     message: Mapped['Message'] = relationship("Message", back_populates="file", single_parent=True)
+
+
+class TaskAssignment(Base):
+    __tablename__ = 'task_assignments'
+
+    task_uuid: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("tasks.id", ondelete='CASCADE'),
+                                                 nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="CASCADE"), nullable=False,
+                                         index=True)
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus, name="task_status_enum"), nullable=False,
+                                               default=TaskStatus.NEW, index=True)
+    task: Mapped["Task"] = relationship(
+        "Task",
+        back_populates="assignments",
+    )
+
+    user: Mapped["User"] = relationship(
+        "User",
+        back_populates="task_assignments",
+    )
+
+
+class Task(Base):
+    __tablename__ = 'tasks'
+
+    id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    title: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    creator_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey("users.id", ondelete="SET NULL"), nullable=True,
+                                            index=True)
+    chat_id: Mapped[int] = mapped_column(BigInteger, ForeignKey('chats.id', ondelete='SET NULL'), nullable=True,
+                                         index=True)
+    message_id: Mapped[int | None] = mapped_column(BigInteger, ForeignKey('messages.id', ondelete='SET NULL'),
+                                                   nullable=True, unique=True)
+    priority: Mapped[TaskPriority] = mapped_column(Enum(TaskPriority, name="task_priority_enum"), nullable=False,
+                                                   default=TaskPriority.LOW, index=True)
+    status: Mapped[TaskStatus] = mapped_column(Enum(TaskStatus, name="task_status_enum"), nullable=False,
+                                               default=TaskStatus.NEW, index=True)
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+        server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=func.now(),
+        onupdate=func.now(),
+        server_default=func.now(),
+        server_onupdate=func.now(),
+    )
+
+    assignments: Mapped[List["TaskAssignment"]] = relationship(
+        "TaskAssignment",
+        back_populates="task",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+    )
+    chat: Mapped['Chat'] = relationship(
+        'Chat',
+        back_populates='tasks',
+        lazy="joined",
+    )
+    creator: Mapped['User'] = relationship(
+        'User',
+        back_populates='tasks_created',
+        lazy="joined",
+    )
+    message: Mapped[Optional['Message']] = relationship(
+        "Message",
+        back_populates="task",
+        lazy="selectin",
+    )
+
