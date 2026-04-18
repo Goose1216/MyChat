@@ -82,25 +82,36 @@ class TaskService:
                         "user_id": user_id,
                     }
                 )
+            await uow.session.flush()
+
+            await uow.session.refresh(task_created, ["assignments"])
             task_for_return = TaskFromDbSchema.model_validate(task_created)
             await uow.commit()
 
             return task_for_return
 
-    async def update_task(self, task_id: UUID, task_update: TaskUpdateSchema) -> TaskFromDbSchema:
+    async def update_task(self, task_id: UUID, task_update: TaskUpdateSchema, user_id: int) -> TaskFromDbSchema:
         update_data = task_update.model_dump(exclude_unset=True)
 
         async with self.uow as uow:
             task = await uow.task.get_one(pk=task_id)
+
+            assignment = await uow.task_assignment.get_by(
+                task_uuid=task_id,
+                user_id=user_id,
+            )
+
+            if not assignment and not task.creator_id == user_id:
+                raise UnprocessableEntity(detail="Нет прав на изменение задачи")
             if not task:
                 raise UnfoundEntity(detail="Задача не найдена")
 
-            for field, value in update_data.items():
-                setattr(task, field, value)
+            await uow.task.update(pk=task_id, data=update_data)
 
             await uow.commit()
+            task_new = await uow.task.get_one(pk=task_id)
 
-            return TaskFromDbSchema.model_validate(task)
+            return TaskFromDbSchema.model_validate(task_new)
 
     async def delete_task(self, task_id: UUID) -> None:
         async with self.uow as uow:

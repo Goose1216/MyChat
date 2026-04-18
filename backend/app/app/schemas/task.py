@@ -28,6 +28,19 @@ class TaskUpdateSchema(BaseModel):
     status: TaskStatus | None = None
 
 
+class TaskAssignmentFromDbSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    task_uuid: UUID
+
+    user: UserSchemaFromBd | None = None
+
+    _convert_user = field_validator("user", mode="before")(
+        sqlalchemy_to_pydantic(UserSchemaFromBd)
+    )
+
+
 class TaskFromDbSchema(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -42,6 +55,7 @@ class TaskFromDbSchema(BaseModel):
     created_at: datetime
     updated_at: datetime
 
+    assignments: list[TaskAssignmentFromDbSchema] = []
     creator: UserSchemaFromBd | None = None
 
     _convert_creator = field_validator("creator", mode="before")(
@@ -59,16 +73,3 @@ class TaskAssignmentStatusUpdateSchema(BaseModel):
     user_id: int
     status: TaskStatus
 
-
-class TaskAssignmentFromDbSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    task_uuid: UUID
-    user_id: int
-    status: TaskStatus
-
-    user: UserSchemaFromBd | None = None
-
-    _convert_user = field_validator("user", mode="before")(
-        sqlalchemy_to_pydantic(UserSchemaFromBd)
-    )

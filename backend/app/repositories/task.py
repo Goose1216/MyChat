@@ -1,9 +1,9 @@
 from uuid import UUID
-from sqlalchemy import select
+from sqlalchemy import select, case
 from sqlalchemy.orm import selectinload, joinedload
 
 from .base import Repository
-from app.db.models import Task, TaskAssignment
+from app.db.models import Task, TaskAssignment, TaskStatus, TaskPriority
 
 class TaskRepository(Repository):
     model = Task
@@ -65,10 +65,27 @@ class TaskRepository(Repository):
         if priority:
             stmt = stmt.where(self.model.priority == priority)
 
-        if assignee_id:
-            stmt = stmt.join(TaskAssignment).where(
-                TaskAssignment.user_id == assignee_id
-            )
+        #if assignee_id:
+        #    stmt = stmt.join(TaskAssignment).where(
+        #        TaskAssignment.user_id == assignee_id
+        #    )
+
+        status_order = case(
+            (self.model.status == TaskStatus.NEW, 0),
+            (self.model.status == TaskStatus.IN_PROGRESS, 1),
+            (self.model.status == TaskStatus.DONE, 2),
+            (self.model.status == TaskStatus.CANCELLED, 3),
+            else_=100,
+        )
+        priority_order = case(
+            (self.model.priority == TaskPriority.LOW, 0),
+            (self.model.priority == TaskPriority.MEDIUM, 1),
+            (self.model.priority == TaskPriority.HIGH, 2),
+            (self.model.priority == TaskPriority.CRITICAL, 3),
+            else_=100,
+        )
+        stmt = stmt.order_by(priority_order.desc())
+        stmt = stmt.order_by(status_order, self.model.created_at.desc())
 
         stmt = stmt.limit(limit).offset(offset)
 

@@ -112,7 +112,7 @@ async def update_task(
     uow: IUnitOfWork = Depends(get_unit_of_work),
 ):
     service = TaskService(uow)
-    updated_task = await service.update_task(task_id, task_update)
+    updated_task = await service.update_task(task_id, task_update, access_token.get("user_id"))
     return Response(data=updated_task)
 
 @tasks.delete(

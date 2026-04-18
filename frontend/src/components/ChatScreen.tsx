@@ -15,7 +15,8 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const initialScrollDoneRef = useRef(false);
   const scrollOnSendRef = useRef(false);
 
-
+  const [editingTaskStatus, setEditingTaskStatus] = useState("");
+const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
 
   const lastTypingRef = useRef<number>(0);
   const lastSentReadRef = useRef<number>(0);
@@ -42,6 +43,9 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const [tasksModalOpen, setTasksModalOpen] = useState(false);
   const [tasks, setTasks] = useState<any[]>([]);
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editingTaskTitle, setEditingTaskTitle] = useState("");
+  const [editingTaskDescription, setEditingTaskDescription] = useState("");
   // === edit message ===
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingText, setEditingText] = useState("");
@@ -451,6 +455,60 @@ const getLastVisibleForeignMessageId = () => {
 
 const [creatingTask, setCreatingTask] = useState(false);
 
+const isCreator = (task: any) => {
+
+  return task.creator?.id === userId;
+
+};
+
+const isAssignee = (task: any) => {
+
+  return task.assignments?.some((a: any) => a.user_id === userId);
+
+};
+
+const updateTask = async () => {
+  if (!editingTaskId) return;
+
+  try {
+    const res = await fetchWithAuth(`${API}/tasks/${editingTaskId}/`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        title: editingTaskTitle,
+        description: editingTaskDescription,
+        status: editingTaskStatus,
+      }),
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      alert(data?.description || "Ошибка обновления");
+      return;
+    }
+
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === editingTaskId
+          ? {
+              ...t,
+              title: editingTaskTitle,
+              description: editingTaskDescription,
+              status: editingTaskStatus, // ← ДОБАВЬ
+            }
+          : t
+      )
+    );
+
+    setEditingTaskId(null);
+  } catch {
+    alert("Ошибка сети");
+  }
+};
+
 const loadTasks = async () => {
   setLoadingTasks(true);
 
@@ -823,26 +881,203 @@ useEffect(() => {
         </div>
       )}
 
-      {!loadingTasks && tasks.map((t) => (
-        <div
-          key={t.id}
-          className="border rounded p-2 mb-2"
-        >
-          <div className="font-medium">
+{!loadingTasks && tasks.map((t) => {
+
+  const assignees =
+    t.assignments?.map((a: any) => safeName(a.user)) || [];
+
+  const creatorName = safeName(t.creator);
+  const isMeAssigned = t.assignments?.some(
+    (a: any) => a.user_id === userId
+  );
+
+  return (
+    <div
+      key={t.id}
+      className={`border rounded p-3 mb-2 ${
+        isMeAssigned ? "border-green-500 bg-green-50" : ""
+      }`}
+    >
+      {/* ===== EDIT MODE ===== */}
+      {editingTaskId === t.id ? (
+        <>
+          <input
+            value={editingTaskTitle}
+            onChange={(e) => setEditingTaskTitle(e.target.value)}
+            className="w-full border rounded p-1 mb-1"
+          />
+
+          <textarea
+            value={editingTaskDescription}
+            onChange={(e) => setEditingTaskDescription(e.target.value)}
+            className="w-full border rounded p-1 mb-1"
+          />
+
+          <div className="flex gap-2">
+            <button
+              onClick={updateTask}
+              className="text-xs bg-blue-600 text-white px-2 py-1 rounded"
+            >
+              Сохранить
+            </button>
+
+            <button
+              onClick={() => setEditingTaskId(null)}
+              className="text-xs bg-gray-300 px-2 py-1 rounded"
+            >
+              Отмена
+            </button>
+          </div>
+
+          {(isCreator(t) || isAssignee(t)) && (
+              <select
+                value={editingTaskStatus}
+                onChange={(e) => setEditingTaskStatus(e.target.value)}
+                className="text-xs border rounded px-1 py-0.5 mt-1"
+              >
+              <option value="NEW">NEW</option>
+              <option value="IN_PROGRESS">IN_PROGRESS</option>
+              <option value="DONE">DONE</option>
+              <option value="CANCELLED">CANCELLED</option>
+            </select>
+          )}
+        </>
+      ) : (
+        <>
+          {/* TITLE */}
+          <div className="font-medium text-base">
             {t.title}
           </div>
 
+          {/* DESCRIPTION */}
           {t.description && (
-            <div className="text-sm text-gray-600">
+            <div className="text-sm text-gray-600 mt-1">
               {t.description}
             </div>
           )}
 
-          <div className="text-xs text-gray-400 mt-1">
-            Статус: {t.status} | Приоритет: {t.priority}
+          {/* META */}
+          <div className="text-xs text-gray-500 mt-2 flex flex-col gap-1">
+
+            <div>
+              👤 Назначил:{" "}
+              <span className="font-medium">
+                {creatorName}
+              </span>
+            </div>
+
+            <div>
+              👥 Исполнители:{" "}
+              {assignees.length > 0
+                ? assignees.join(", ")
+                : "—"}
+            </div>
+
+<div className="flex items-center gap-2">
+  <span>Статус:</span>
+
+  {(isCreator(t) || isAssignee(t)) ? (
+    <select
+      value={t.status}
+      onChange={async (e) => {
+      const newStatus = e.target.value;
+
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === t.id
+            ? { ...task, status: newStatus }
+            : task
+        )
+      );
+
+      try {
+        await fetchWithAuth(`${API}/tasks/${t.id}/`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus }),
+        });
+      } catch {
+        // rollback (иначе рассинхрон)
+        setTasks((prev) =>
+          prev.map((task) =>
+            task.id === t.id
+              ? { ...task, status: t.status }
+              : task
+          )
+        );
+      }
+    }}
+      className="text-xs border rounded px-1 py-0.5"
+    >
+      <option value="NEW">NEW</option>
+      <option value="IN_PROGRESS">IN_PROGRESS</option>
+      <option value="DONE">DONE</option>
+      <option value="CANCELLED">CANCELLED</option>
+    </select>
+  ) : (
+    <span>{t.status}</span>
+  )}
+
+  <select
+  value={t.priority}
+  onChange={async (e) => {
+    const newPriority = e.target.value;
+
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === t.id
+          ? { ...task, priority: newPriority }
+          : task
+      )
+    );
+
+    try {
+      await fetchWithAuth(`${API}/tasks/${t.id}/`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ priority: newPriority }),
+      });
+    } catch {
+      // rollback
+      setTasks((prev) =>
+        prev.map((task) =>
+          task.id === t.id
+            ? { ...task, priority: t.priority }
+            : task
+        )
+      );
+    }
+  }}
+  className="text-xs border rounded px-1 py-0.5"
+>
+  <option value="LOW">LOW</option>
+  <option value="MEDIUM">MEDIUM</option>
+  <option value="HIGH">HIGH</option>
+</select>
+</div>
           </div>
-        </div>
-      ))}
+
+          {/* ACTION */}
+          {isCreator(t) && (
+            <div className="mt-2 flex justify-end">
+              <button
+                onClick={() => {
+                  setEditingTaskId(t.id);
+                  setEditingTaskTitle(t.title || "");
+                  setEditingTaskDescription(t.description || "");
+                  setEditingTaskStatus(t.status);
+                }}
+                className="text-xs text-blue-600"
+              >
+                ✏️ Редактировать
+              </button>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+})}
 
     </div>
   </div>
