@@ -16,7 +16,11 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const scrollOnSendRef = useRef(false);
 
   const [editingTaskStatus, setEditingTaskStatus] = useState("");
-const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
+  const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
+
+  const [stats, setStats] = useState<any[]>([]);
+  const [loadingStats, setLoadingStats] = useState(false);
+  const [showStats, setShowStats] = useState(false);
 
   const lastTypingRef = useRef<number>(0);
   const lastSentReadRef = useRef<number>(0);
@@ -31,6 +35,7 @@ const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
   const [addUserError, setAddUserError] = useState<string>("");
   const [loadingUsers, setLoadingUsers] = useState(false);
+
 
 
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -63,6 +68,11 @@ const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
 
   const formatDateTime = (iso: string) =>
     new Date(iso).toLocaleString();
+
+  useEffect(() => {
+  setStats([]);
+  setShowStats(false);
+}, [chat.id]);
 
   // ================= LOAD =================
   useEffect(() => {
@@ -193,6 +203,29 @@ const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
 }, []);
 
 
+  const loadStats = async () => {
+  setLoadingStats(true);
+
+  try {
+    const res = await fetchWithAuth(
+      `${API}/tasks/stats/?chat_id=${chat.id}`
+    );
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) {
+      alert("Ошибка загрузки статистики");
+      return;
+    }
+
+    setStats(data.data || []);
+  } catch {
+    alert("Ошибка сети");
+  } finally {
+    setLoadingStats(false);
+  }
+};
+
   // ================= SEND =================
   const send = (e) => {
     e.preventDefault();
@@ -234,6 +267,8 @@ const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
     // обновление придёт через WS
     setEditingId(null);
   };
+
+
 
   // ================= LEAVE CHAT =================
   const leaveChat = async () => {
@@ -612,72 +647,80 @@ useEffect(() => {
 }, [chat.id]);
 
 
-  return (
-    <div className="min-h-screen flex flex-col bg-white">
-      {/* HEADER */}
-      <header className="border-b bg-white">
-        <div className="max-w-6xl mx-auto p-4 flex justify-between items-center">
-          <button
-            onClick={onBack}
-            className="text-blue-600 hover:text-blue-800 font-medium"
-          >
-            ← Назад
-          </button>
+    return (
+      <div className="border-b bg-white">
+        {/* HEADER */}
+        <div className="max-w-6xl mx-auto p-4">
 
-          <span className="text-gray-900 font-semibold text-lg">
-            Чат #{chat.id}
-          </span>
+  <div className="grid grid-cols-3 items-center">
+  {/* LEFT */}
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => {
-                setTasksModalOpen(true);
-                loadTasks();
-              }}
-              className="text-sm text-purple-600"
-            >
-              📋 Задачи
-            </button>
+  <div className="flex justify-start">
+    <button
+      onClick={onBack}
+      className="text-blue-600 hover:text-blue-800 font-medium"
+    >
+      ← Назад
+    </button>
+  </div>
 
-            {chat.chat_type !== "private"  && (
-              <button
-                onClick={openAddUserModal}
-                className="text-sm text-blue-600"
-              >
-                + Добавить
-              </button>
-            )}
+  {/* CENTER */}
+  <div className="flex justify-center">
+    <span className="text-gray-900 font-semibold text-lg">
+      Чат #{chat.id}
+    </span>
+  </div>
 
-            <button
-              onClick={leaveChat}
-              className="text-sm text-red-600"
-            >
-              Выйти
-            </button>
+  {/* RIGHT */}
+  <div className="flex justify-end items-center gap-3">
+    <button
+      onClick={() => {
+        setTasksModalOpen(true);
+        loadTasks();
+      }}
+      className="text-sm text-purple-600"
+    >
+      📋 Задачи
+    </button>
 
-            <span className={connected ? "text-green-600" : "text-gray-400"}>
-              Онлайн
-            </span>
-          </div>
-        </div>
+    {chat.chat_type !== "private" && (
+      <button
+        onClick={openAddUserModal}
+        className="text-sm text-blue-600"
+      >
+        + Добавить
+      </button>
+    )}
 
-        {/* MEMBERS */}
-        <div className="max-w-6xl mx-auto px-4 pb-3 flex gap-2 flex-wrap">
-          {members.map((u) => (
-            <div
-              key={u.id}
-              onClick={() => setProfileUser(u)}
-              className={`px-3 py-1 rounded-full cursor-pointer text-white text-sm ${avatarColor(
-                u.id
-              )}`}
-            >
-              {safeName(u)}
-            </div>
-          ))}
-        </div>
-      </header>
+    <button
+      onClick={leaveChat}
+      className="text-sm text-red-600"
+    >
+      Выйти
+    </button>
 
-      {/* MESSAGES */}
+    <span className={connected ? "text-green-600" : "text-gray-400"}>
+      Онлайн
+    </span>
+  </div>
+</div>
+
+ {/* MEMBERS */}
+  <div className="max-w-6xl mx-auto px-4 pb-3 flex gap-2 flex-wrap">
+    {members.map((u) => (
+      <div
+        key={u.id}
+        onClick={() => setProfileUser(u)}
+        className={`px-3 py-1 rounded-full cursor-pointer text-white text-sm ${avatarColor(
+          u.id
+        )}`}
+      >
+        {safeName(u)}
+      </div>
+    ))}
+  </div>
+</div>
+
        {/* MESSAGES */}
       <main className="flex-1 overflow-y-auto">
         <div className="max-w-6xl mx-auto p-4">
@@ -854,20 +897,45 @@ useEffect(() => {
 </div>
   {tasksModalOpen && (
   <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-    <div className="bg-white p-4 rounded w-[500px] max-h-[80vh] overflow-y-auto text-gray-900">
+   <div className="bg-white p-4 rounded w-[500px] max-h-[80vh] overflow-y-auto text-gray-900">
+    <div className="max-w-6xl mx-auto p-4 flex items-center justify-between">
+ <div className="flex items-center gap-3">
+    <button onClick={onBack}>← Назад</button>
+    <span>Чат #{chat.id}</span>
+  </div>
 
-      <div className="flex justify-between items-center mb-3">
-        <h3 className="font-semibold text-lg">
-          Задачи чата #{chat.id}
-        </h3>
+ <div className="flex items-center gap-3">
 
-        <button
-          onClick={() => setTasksModalOpen(false)}
-          className="text-sm text-gray-500"
-        >
-          ✕
-        </button>
-      </div>
+    <button
+      onClick={() => setShowStats(false)}
+      className={`text-sm px-2 py-1 rounded ${
+        !showStats ? "bg-blue-600 text-white" : "bg-gray-200"
+      }`}
+    >
+      Задачи
+    </button>
+
+    <button
+      onClick={() => {
+        setShowStats(true);
+        if (!stats.length) loadStats();
+      }}
+      className={`text-sm px-2 py-1 rounded ${
+        showStats ? "bg-purple-600 text-white" : "bg-gray-200"
+      }`}
+    >
+      📊 Статистика
+    </button>
+
+    <button
+      onClick={() => setTasksModalOpen(false)}
+      className="text-sm text-gray-500"
+    >
+      ✕
+    </button>
+
+  </div>
+</div>
 
       {loadingTasks && (
         <div className="text-sm text-gray-500">
@@ -875,13 +943,54 @@ useEffect(() => {
         </div>
       )}
 
-      {!loadingTasks && tasks.length === 0 && (
+      {!showStats && !loadingTasks && tasks.length === 0 && (
         <div className="text-sm text-gray-500">
           Нет задач
         </div>
       )}
 
-{!loadingTasks && tasks.map((t) => {
+{showStats ? (
+  <>
+    {loadingStats && (
+      <div className="text-sm text-gray-500">Загрузка...</div>
+    )}
+
+    {!loadingStats && stats.map((s) => {
+      const user = members.find((u) => u.id === s.user_id);
+      const name = user ? safeName(user) : `#${s.user_id}`;
+
+      return (
+        <div key={s.user_id} className="border rounded p-3 mb-2">
+          <div className="font-medium">{name}</div>
+
+          <div className="text-sm">
+            Всего задач: {s.total_tasks}
+          </div>
+
+          <div className="text-xs mt-2">
+            <div className="font-medium">Статусы:</div>
+            {s.by_status.map((st: any) => (
+              <div key={st.status}>
+                {st.status}: {st.count}
+              </div>
+            ))}
+          </div>
+
+          <div className="text-xs mt-2">
+            <div className="font-medium">Приоритеты:</div>
+            {s.by_priority.map((pr: any) => (
+              <div key={pr.priority}>
+                {pr.priority}: {pr.count}
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    })}
+  </>
+) : (
+  <>
+    {!loadingTasks && tasks.map((t) => {
 
   const assignees =
     t.assignments?.map((a: any) => safeName(a.user)) || [];
@@ -1078,7 +1187,8 @@ useEffect(() => {
     </div>
   );
 })}
-
+  </>
+)}
     </div>
   </div>
   )}
