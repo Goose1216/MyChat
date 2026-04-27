@@ -12,7 +12,9 @@ from app.app.schemas.task import (
     TaskFromDbSchema,
     TaskAssignmentStatusUpdateSchema,
     TaskCreateSchemaForEndpoint,
+    TaskStatsResponseSchema,
 )
+from app.app.schemas.task import TaskStatsResponseSchema
 from app.app.schemas.response import Response
 from app.utils.response import get_responses_description_by_codes
 from app.utils import get_unit_of_work
@@ -26,6 +28,21 @@ tasks = APIRouter(
     tags=["Задачи"],
     prefix="/tasks",
 )
+
+@tasks.get(
+    "/stats/",
+    response_model=Response[List[TaskStatsResponseSchema]],
+    name="Статистика по задачам пользователей",
+    responses=get_responses_description_by_codes([401]),
+)
+async def get_tasks_stats(
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+    chat_id: int | None = Query(None),
+):
+    service = TaskService(uow)
+    stats = await service.get_tasks_stats(chat_id=chat_id)
+    return Response(data=stats)
 
 @tasks.get(
     "/",

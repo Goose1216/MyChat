@@ -1,9 +1,11 @@
 from uuid import UUID
-from sqlalchemy import select, case
+from sqlalchemy import select, case, func
 from sqlalchemy.orm import selectinload, joinedload
 
 from .base import Repository
+from app.app.schemas.task import TaskStatsResponseSchema
 from app.db.models import Task, TaskAssignment, TaskStatus, TaskPriority
+from collections import defaultdict
 
 class TaskRepository(Repository):
     model = Task
@@ -91,3 +93,59 @@ class TaskRepository(Repository):
 
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+    async def get_stats(self, chat_id: int | None = None):
+        query = (
+            select(
+                TaskAssignment.user_id.label("user_id"),
+                Task.status,
+                Task.priority,
+                func.count().label("count"),
+            )
+            .join(Task, Task.id == TaskAssignment.task_uuid)
+            .group_by(
+                TaskAssignment.user_id,
+                Task.status,
+                Task.priority,
+            )
+        )
+
+        if chat_id is not None:
+            query = query.where(Task.chat_id == chat_id)
+
+        result = await self.session.execute(query)
+        rows = result.all()
+        users = defaultdict(lambda: {
+            "total": 0,
+            "status": defaultdict(int),
+            "priority": defaultdict(int),
+        })
+
+        for row in rows:
+            user_id = row.user_id
+            status = row.status
+            priority = row.priority
+            count = row.count
+            u = users[user_id]
+            u["total"] += count
+            u["status"][status] += count
+            u["priority"][priority] += count
+
+        result = []
+        for user_id, data in users.items():
+            result.append(
+                TaskStatsResponseSchema(
+                    user_id=user_id,
+                    total_tasks=data["total"],
+                    by_status=[
+                        {"status": k, "count": v}
+                        for k, v in data["status"].items()
+                    ],
+                    by_priority=[
+                        {"priority": k, "count": v}
+                        for k, v in data["priority"].items()
+                    ],
+                )
+            )
+
+        return result

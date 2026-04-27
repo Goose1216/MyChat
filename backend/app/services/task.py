@@ -129,3 +129,7 @@ class TaskService:
                 raise UnfoundEntity(detail="Задача не найдена")
 
             return TaskFromDbSchema.model_validate(task)
+
+    async def get_tasks_stats(self, chat_id: int | None = None):
+        async with self.uow:
+            return await self.uow.task.get_stats(chat_id=chat_id)

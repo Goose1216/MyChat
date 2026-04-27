@@ -73,3 +73,19 @@ class TaskAssignmentStatusUpdateSchema(BaseModel):
     user_id: int
     status: TaskStatus
 
+
+class TaskStatsByStatus(BaseModel):
+    status: str
+    count: int
+
+
+class TaskStatsByPriority(BaseModel):
+    priority: str
+    count: int
+
+
+class TaskStatsResponseSchema(BaseModel):
+    user_id: int
+    total_tasks: int
+    by_status: List[TaskStatsByStatus]
+    by_priority: List[TaskStatsByPriority]
