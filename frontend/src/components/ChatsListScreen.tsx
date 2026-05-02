@@ -115,29 +115,34 @@ const updateChatLastMessage = (wsMsg: any) => {
   if (wsMsg.type_of_message !== 0) return;
 
   setChats(prev => {
-    return prev.map(chat => {
-      if (chat.id !== wsMsg.chat_id) return chat;
+    const idx = prev.findIndex(c => c.id === wsMsg.chat_id);
+    if (idx === -1) return prev;
 
-      const isForeign =
-        wsMsg.sender_id !== userId
+    const chat = prev[idx];
 
-      return {
-        ...chat,
-        last_message: {
-          chat_id: wsMsg.chat_id,
-          sender_id: wsMsg.sender_id,
-          content: wsMsg.text ?? null,
-          file: wsMsg.file ?? null,
-          created_at: wsMsg.created_at,
-          updated_at: wsMsg.created_at,
-          sender: wsMsg.sender,
-          is_deleted: false,
-        },
-        cnt_unread_messages: isForeign
-          ? Math.min((chat.cnt_unread_messages ?? 0) + 1, 99)
-          : chat.cnt_unread_messages,
-      };
-    });
+    const isForeign = wsMsg.sender_id !== userId;
+
+    const updatedChat = {
+      ...chat,
+      last_message: {
+        chat_id: wsMsg.chat_id,
+        sender_id: wsMsg.sender_id,
+        content: wsMsg.text ?? null,
+        file: wsMsg.file ?? null,
+        created_at: wsMsg.created_at,
+        updated_at: wsMsg.created_at,
+        sender: wsMsg.sender,
+        is_deleted: false,
+      },
+      cnt_unread_messages: isForeign
+        ? Math.min((chat.cnt_unread_messages ?? 0) + 1, 99)
+        : chat.cnt_unread_messages,
+    };
+
+    const newList = [...prev];
+    newList.splice(idx, 1);
+
+    return [updatedChat, ...newList];
   });
 };
 
