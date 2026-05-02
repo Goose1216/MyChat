@@ -2,12 +2,14 @@ import React, { useEffect, useRef, useState } from "react";
 import { useWebSocket } from "../Websocket";
 import { fetchWithAuth, apiBase } from "../api";
 import type { Message } from "../types";
+import TaskStatsPanel from "./TaskStatsPanel";
 import "../design.css";
 
 const AVATAR_CLASSES = ["av-blue", "av-teal", "av-amber", "av-purple", "av-rose", "av-green"];
 const avatarColor = (id: number) => AVATAR_CLASSES[id % AVATAR_CLASSES.length];
 const safeName = (u: any) => u?.username || u?.email || "User";
-const formatDateTime = (iso: string) => new Date(iso).toLocaleString("ru-RU", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
+const formatDateTime = (iso: string) =>
+  new Date(iso).toLocaleString("ru-RU", { hour: "2-digit", minute: "2-digit", day: "2-digit", month: "short" });
 
 const STATUS_OPTIONS = ["NEW", "IN_PROGRESS", "DONE", "CANCELLED"];
 const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH"];
@@ -15,10 +17,6 @@ const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH"];
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = { NEW: "pill-new", IN_PROGRESS: "pill-prog", DONE: "pill-done", CANCELLED: "pill-cancel" };
   return <span className={`pill ${map[status] || "pill-cancel"}`}>{status}</span>;
-}
-function PriorityPill({ priority }: { priority: string }) {
-  const map: Record<string, string> = { LOW: "pill-low", MEDIUM: "pill-med", HIGH: "pill-high" };
-  return <span className={`pill ${map[priority] || "pill-low"}`}>{priority}</span>;
 }
 
 export default function ChatScreen({ userId, chat, onBack }) {
@@ -32,14 +30,12 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const messageRefs = useRef<Record<number, HTMLDivElement | null>>({});
   const initialScrollDoneRef = useRef(false);
   const scrollOnSendRef = useRef(false);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
 
   const [editingTaskStatus, setEditingTaskStatus] = useState("");
-  const [updatingTaskId, setUpdatingTaskId] = useState<number | null>(null);
   const [stats, setStats] = useState<any[]>([]);
   const [loadingStats, setLoadingStats] = useState(false);
   const [showStats, setShowStats] = useState(false);
-
-  const messagesRef = useRef<HTMLDivElement | null>(null);
 
   const lastTypingRef = useRef<number>(0);
   const lastSentReadRef = useRef<number>(0);
@@ -75,7 +71,6 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
   useEffect(() => { setStats([]); setShowStats(false); }, [chat.id]);
 
-  // Load messages & members
   useEffect(() => {
     (async () => {
       const res = await fetchWithAuth(`${API}/chats/${chat.id}/messages`);
@@ -93,8 +88,6 @@ export default function ChatScreen({ userId, chat, onBack }) {
     })();
   }, [chat.id]);
 
-
-  // WebSocket handler
   useEffect(() => {
     const handler = (msg: any) => {
       if (msg.chat_id !== chat.id) return;
@@ -108,13 +101,11 @@ export default function ChatScreen({ userId, chat, onBack }) {
       }
       if (msg.type_of_message === 1) {
         setMessages((p) => p.map((m) => m.id === msg.message_id
-          ? { ...m, text: msg.text, timestamp: msg.updated_at, edited: true, is_system: false, is_deleted: msg.is_deleted }
-          : m));
+          ? { ...m, text: msg.text, timestamp: msg.updated_at, edited: true, is_system: false, is_deleted: msg.is_deleted } : m));
       }
       if (msg.type_of_message === 2) {
         setMessages((p) => p.map((m) => m.id === msg.message_id
-          ? { ...m, text: msg.text, timestamp: msg.updated_at, edited: true, is_system: false, is_deleted: true }
-          : m));
+          ? { ...m, text: msg.text, timestamp: msg.updated_at, edited: true, is_system: false, is_deleted: true } : m));
       }
       if (msg.type_of_message === 3) {
         if (msg.sender_id === userId) return;
@@ -128,7 +119,6 @@ export default function ChatScreen({ userId, chat, onBack }) {
     return () => removeHandler(handler);
   }, [chat.id, userId]);
 
-  // Typing TTL
   useEffect(() => {
     const interval = setInterval(() => {
       const now = Date.now();
@@ -221,11 +211,36 @@ export default function ChatScreen({ userId, chat, onBack }) {
     await fetchWithAuth(`${API}/messages/${id}/`, { method: "DELETE" });
   };
 
+  useEffect(() => { lastReadMessageIdRef.current = chat.last_read_message_id || 0; }, [chat.id]);
+
   useEffect(() => {
-
-  lastReadMessageIdRef.current = chat.last_read_message_id || 0;
-
-}, [chat.id]);
+    const el = messagesRef.current;
+    if (!el) return;
+    const sendRead = (id: number) => {
+      if (Date.now() - lastSentReadRef.current < 300) return;
+      lastSentReadRef.current = Date.now();
+      if (id <= lastReadMessageIdRef.current) return;
+      lastReadMessageIdRef.current = id;
+      fetchWithAuth(`${API}/messages/read/${id}/`, { method: "POST" }).catch(() => {});
+    };
+    const onScroll = () => {
+      const containerRect = el.getBoundingClientRect();
+      let maxVisibleId = lastReadMessageIdRef.current;
+      for (const m of messages) {
+        if (m.sender_id === userId) continue;
+        const node = messageRefs.current[m.id];
+        if (!node) continue;
+        const rect = node.getBoundingClientRect();
+        if (rect.bottom > containerRect.top && rect.top < containerRect.bottom && m.id > maxVisibleId) {
+          maxVisibleId = m.id;
+        }
+      }
+      if (maxVisibleId > lastReadMessageIdRef.current) sendRead(maxVisibleId);
+    };
+    el.addEventListener("scroll", onScroll);
+    onScroll();
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [messages, userId]);
 
   const sendFile = async () => {
     if (!selectedFile) return;
@@ -245,55 +260,6 @@ export default function ChatScreen({ userId, chat, onBack }) {
   };
 
   useEffect(() => {
-  const el = messagesRef.current;
-  if (!el) return;
-
-  const sendRead = (id: number) => {
-    if (Date.now() - lastSentReadRef.current < 300) return;
-    lastSentReadRef.current = Date.now();
-
-    if (id <= lastReadMessageIdRef.current) return;
-
-    lastReadMessageIdRef.current = id;
-
-    fetchWithAuth(`${API}/messages/read/${id}/`, {
-      method: "POST",
-    }).catch(() => {});
-  };
-
-  const onScroll = () => {
-    const containerRect = el.getBoundingClientRect();
-    let maxVisibleId = lastReadMessageIdRef.current;
-
-    for (const m of messages) {
-      if (m.sender_id === userId) continue;
-
-      const node = messageRefs.current[m.id];
-      if (!node) continue;
-
-      const rect = node.getBoundingClientRect();
-
-      const isVisible =
-        rect.bottom > containerRect.top &&
-        rect.top < containerRect.bottom;
-
-      if (isVisible && m.id > maxVisibleId) {
-        maxVisibleId = m.id;
-      }
-    }
-
-    if (maxVisibleId > lastReadMessageIdRef.current) {
-      sendRead(maxVisibleId);
-    }
-  };
-
-  el.addEventListener("scroll", onScroll);
-  onScroll();
-
-  return () => el.removeEventListener("scroll", onScroll);
-}, [messages, userId]);
-
-  useEffect(() => {
     if (initialScrollDoneRef.current || !messages.length) return;
     if (chat.last_read_message_id) {
       const el = messageRefs.current[chat.last_read_message_id];
@@ -304,10 +270,9 @@ export default function ChatScreen({ userId, chat, onBack }) {
     initialScrollDoneRef.current = true;
   }, [messages, chat.id]);
 
-
   useEffect(() => { setTypingUsers({}); }, [chat.id]);
 
-  const isCreator = (task: any) => task.creator?.id === userId;
+  const isCreator  = (task: any) => task.creator?.id === userId;
   const isAssignee = (task: any) => task.assignments?.some((a: any) => a.user_id === userId);
 
   const updateTask = async () => {
@@ -320,8 +285,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) { alert(data?.description || "Ошибка обновления"); return; }
       setTasks((prev) => prev.map((t) => t.id === editingTaskId
-        ? { ...t, title: editingTaskTitle, description: editingTaskDescription, status: editingTaskStatus }
-        : t));
+        ? { ...t, title: editingTaskTitle, description: editingTaskDescription, status: editingTaskStatus } : t));
       setEditingTaskId(null);
     } catch { alert("Ошибка сети"); }
   };
@@ -355,20 +319,25 @@ export default function ChatScreen({ userId, chat, onBack }) {
     finally { setCreatingTask(false); }
   };
 
-  // ===== RENDER =====
+  // getName for stats panel: resolve from chat members
+  const getName = (uid: number) => {
+    const u = members.find((m) => m.id === uid);
+    return u ? safeName(u) : `#${uid}`;
+  };
+
   const renderMessageContent = (m: Message) => {
     if (m.is_deleted) return <span style={s.deletedText}>Сообщение удалено</span>;
     if (m.file) return (
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         <span style={{ fontSize: 13, fontWeight: 500 }}>📎 {m.file.filename}</span>
-        <a href={m.file.url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 11, color: m.is_self ? "rgba(255,255,255,0.8)" : "var(--c-accent)", textDecoration: "underline" }}>Скачать</a>
+        <a href={m.file.url} target="_blank" rel="noopener noreferrer"
+          style={{ fontSize: 11, color: m.is_self ? "rgba(255,255,255,0.8)" : "var(--c-accent)", textDecoration: "underline" }}>
+          Скачать
+        </a>
       </div>
     );
     if (editingId === m.id) return (
-      <input
-        style={s.inlineEdit}
-        value={editingText}
-        autoFocus
+      <input style={s.inlineEdit} value={editingText} autoFocus
         onChange={(e) => setEditingText(e.target.value)}
         onKeyDown={(e) => {
           if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
@@ -382,23 +351,22 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
   return (
     <div style={s.page}>
-      {/* ======= HEADER ======= */}
+      {/* HEADER */}
       <header style={s.header}>
         <div style={s.headerLeft}>
           <button className="btn btn-ghost" onClick={onBack} style={{ fontSize: 13, padding: "6px 10px" }}>← Назад</button>
           <div style={s.chatTitle}>Чат #{chat.id}</div>
         </div>
-
         <div style={s.memberPills}>
           {members.map((u) => (
-            <button key={u.id} onClick={() => setProfileUser(u)} style={s.memberPill} className={`avatar avatar-sm ${avatarColor(u.id)}`} title={safeName(u)}>
+            <button key={u.id} onClick={() => setProfileUser(u)}
+              style={s.memberPill} className={`avatar avatar-sm ${avatarColor(u.id)}`} title={safeName(u)}>
               {safeName(u)[0].toUpperCase()}
             </button>
           ))}
         </div>
-
         <div style={s.headerRight}>
-          <button className="btn" style={{ fontSize: 12, gap: 4 }} onClick={() => { setTasksModalOpen(true); loadTasks(); }}>
+          <button className="btn" style={{ fontSize: 12 }} onClick={() => { setTasksModalOpen(true); loadTasks(); }}>
             📋 Задачи
           </button>
           {chat.chat_type !== "private" && (
@@ -411,13 +379,11 @@ export default function ChatScreen({ userId, chat, onBack }) {
         </div>
       </header>
 
-      {/* ======= MESSAGES ======= */}
-     <main ref={messagesRef} style={s.messagesArea}>
+      {/* MESSAGES */}
+      <main ref={messagesRef} style={s.messagesArea}>
         {messages.map((m) => {
           const isReadBySomeone = m.id <= someoneReadUpTo;
-          if (m.is_system) return (
-            <div key={m.id} style={s.systemMsg}>{m.text}</div>
-          );
+          if (m.is_system) return <div key={m.id} style={s.systemMsg}>{m.text}</div>;
           return (
             <div key={m.id} ref={(el) => (messageRefs.current[m.id] = el)}
               style={{ ...s.msgRow, justifyContent: m.is_self ? "flex-end" : "flex-start" }}>
@@ -427,10 +393,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
                 </div>
               )}
               <div style={{ position: "relative" }} className="msg-wrap">
-                <div style={{
-                  ...s.bubble,
-                  ...(m.is_deleted ? s.bubbleDeleted : m.is_self ? s.bubbleSelf : s.bubbleOther)
-                }}>
+                <div style={{ ...s.bubble, ...(m.is_deleted ? s.bubbleDeleted : m.is_self ? s.bubbleSelf : s.bubbleOther) }}>
                   {renderMessageContent(m)}
                   <div style={{ ...s.msgMeta, color: m.is_self ? "rgba(255,255,255,0.65)" : "var(--c-ink-ghost)" }}>
                     <span>{formatDateTime(m.timestamp)}</span>
@@ -438,13 +401,14 @@ export default function ChatScreen({ userId, chat, onBack }) {
                     {m.is_self && <span style={{ marginLeft: 2 }}>{isReadBySomeone ? "✔✔" : "✔"}</span>}
                   </div>
                 </div>
-
                 {!m.is_deleted && (
                   <div className="msg-actions">
                     {m.is_self && (
                       <button className="msg-action-btn msg-action-delete" onClick={() => deleteMessage(m.id)} title="Удалить">🗑</button>
                     )}
-                    <button className="msg-action-btn msg-action-task" onClick={() => { setTaskModalOpen(true); setTaskMessageId(m.id); setTaskTitle(m.text || ""); setTaskDescription(""); setTaskAssignees([]); }} title="Создать задачу">📌</button>
+                    <button className="msg-action-btn msg-action-task"
+                      onClick={() => { setTaskModalOpen(true); setTaskMessageId(m.id); setTaskTitle(m.text || ""); setTaskDescription(""); setTaskAssignees([]); }}
+                      title="Создать задачу">📌</button>
                   </div>
                 )}
               </div>
@@ -454,7 +418,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
         <div ref={bottomRef} />
       </main>
 
-      {/* ======= FOOTER ======= */}
+      {/* FOOTER */}
       <footer style={s.footer}>
         <div style={s.typingRow}>
           {typingIds.length > 0 && (
@@ -464,74 +428,69 @@ export default function ChatScreen({ userId, chat, onBack }) {
           )}
         </div>
         <form onSubmit={(e) => { e.preventDefault(); selectedFile ? sendFile() : send(e); }} style={s.inputRow}>
-          <input type="file" id="file-input" style={{ display: "none" }} onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} />
+          <input type="file" id="file-input" style={{ display: "none" }}
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} />
           <label htmlFor="file-input" style={s.attachBtn} title="Прикрепить файл">📎</label>
-          <input
-            value={newMessage}
+          <input value={newMessage}
             onChange={(e) => { setNewMessage(e.target.value); sendTyping(); }}
             placeholder={selectedFile ? `Файл: ${selectedFile.name}` : "Введите сообщение..."}
-            disabled={!!selectedFile}
-            className="input"
-            style={{ flex: 1, borderRadius: "var(--r-full)", height: 40 }}
-          />
+            disabled={!!selectedFile} className="input"
+            style={{ flex: 1, borderRadius: "var(--r-full)", height: 40 }} />
           {selectedFile && (
             <button type="button" className="btn btn-danger" style={{ fontSize: 11, padding: "6px 10px" }} onClick={() => setSelectedFile(null)}>✕</button>
           )}
-          <button type="submit" className="btn btn-primary" style={{ width: 40, height: 40, borderRadius: "var(--r-full)", padding: 0, fontSize: 16 }}>➤</button>
+          <button type="submit" className="btn btn-primary"
+            style={{ width: 40, height: 40, borderRadius: "var(--r-full)", padding: 0, fontSize: 16 }}>➤</button>
         </form>
       </footer>
 
-      {/* ======= TASKS MODAL ======= */}
+      {/* ══ TASKS MODAL ══════════════════════════════════════════════════════ */}
       {tasksModalOpen && (
         <div className="modal-backdrop">
-          <div className="modal" style={{ maxWidth: 520, maxHeight: "85vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
-            <div className="modal-header">
+          <div className="modal" style={{
+            maxWidth: showStats ? 700 : 520, maxHeight: "90vh",
+            overflow: "hidden", display: "flex", flexDirection: "column",
+            transition: "max-width 0.25s ease",
+          }}>
+            <div className="modal-header" style={{ flexShrink: 0 }}>
               <div style={{ display: "flex", gap: 8 }}>
-                <button className={`btn ${!showStats ? "btn-primary" : ""}`} style={{ fontSize: 12 }} onClick={() => setShowStats(false)}>Задачи</button>
-                <button className={`btn ${showStats ? "btn-primary" : ""}`} style={{ fontSize: 12 }} onClick={() => { setShowStats(true); if (!stats.length) loadStats(); }}>📊 Статистика</button>
+                <button className={`btn ${!showStats ? "btn-primary" : ""}`} style={{ fontSize: 12 }}
+                  onClick={() => setShowStats(false)}>📋 Задачи</button>
+                <button className={`btn ${showStats ? "btn-primary" : ""}`} style={{ fontSize: 12 }}
+                  onClick={() => { setShowStats(true); if (!stats.length) loadStats(); }}>📊 Статистика</button>
               </div>
               <button className="modal-close" onClick={() => setTasksModalOpen(false)}>✕</button>
             </div>
 
-            <div style={{ overflowY: "auto", flex: 1, display: "flex", flexDirection: "column", gap: 10 }}>
-              {loadingTasks && <div style={{ textAlign: "center", padding: 20 }}><span className="spinner" /></div>}
+            <div style={{ overflowY: "auto", flex: 1, padding: "4px 0 8px" }}>
+              {/* ── STATS TAB ── */}
+              {showStats && <TaskStatsPanel stats={stats} loading={loadingStats} getName={getName} />}
 
-              {showStats ? (
-                <>
-                  {loadingStats && <div style={{ textAlign: "center", padding: 20 }}><span className="spinner" /></div>}
-                  {!loadingStats && stats.map((s) => {
-                    const user = members.find((u) => u.id === s.user_id);
-                    return (
-                      <div key={s.user_id} style={{ border: "1px solid var(--c-line)", borderRadius: "var(--r-md)", padding: 12 }}>
-                        <div style={{ fontWeight: 600, marginBottom: 6 }}>{user ? safeName(user) : `#${s.user_id}`}</div>
-                        <div style={{ fontSize: 12, color: "var(--c-ink-muted)" }}>Всего задач: {s.total_tasks}</div>
-                        <div style={{ fontSize: 11, marginTop: 8 }}>
-                          <div style={{ fontWeight: 500, marginBottom: 4 }}>Статусы:</div>
-                          {s.by_status.map((st: any) => <div key={st.status}>{st.status}: {st.count}</div>)}
-                        </div>
-                        <div style={{ fontSize: 11, marginTop: 8 }}>
-                          <div style={{ fontWeight: 500, marginBottom: 4 }}>Приоритеты:</div>
-                          {s.by_priority.map((pr: any) => <div key={pr.priority}>{pr.priority}: {pr.count}</div>)}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              ) : (
-                <>
-                  {!loadingTasks && tasks.length === 0 && <p style={{ color: "var(--c-ink-muted)", fontSize: 13, textAlign: "center", padding: 20 }}>Нет задач</p>}
+              {/* ── TASKS TAB ── */}
+              {!showStats && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {loadingTasks && <div style={{ textAlign: "center", padding: 20 }}><span className="spinner" /></div>}
+                  {!loadingTasks && tasks.length === 0 && (
+                    <div style={{ textAlign: "center", padding: 32, color: "var(--c-ink-muted)", fontSize: 13 }}>
+                      <div style={{ fontSize: 28, marginBottom: 8 }}>📋</div>Нет задач в этом чате
+                    </div>
+                  )}
                   {!loadingTasks && tasks.map((t) => {
                     const assignees = t.assignments?.map((a: any) => safeName(a.user)) || [];
                     const isMeAssigned = t.assignments?.some((a: any) => a.user_id === userId);
                     return (
-                      <div key={t.id} style={{ border: `1px solid ${isMeAssigned ? "var(--c-success)" : "var(--c-line)"}`, borderRadius: "var(--r-md)", padding: 12, background: isMeAssigned ? "var(--c-success-bg)" : "var(--c-paper)" }}>
+                      <div key={t.id} style={{
+                        border: `1px solid ${isMeAssigned ? "var(--c-success)" : "var(--c-line)"}`,
+                        borderRadius: "var(--r-md)", padding: 12,
+                        background: isMeAssigned ? "var(--c-success-bg)" : "var(--c-paper)",
+                      }}>
                         {editingTaskId === t.id ? (
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             <input value={editingTaskTitle} onChange={(e) => setEditingTaskTitle(e.target.value)} className="input" />
                             <textarea value={editingTaskDescription} onChange={(e) => setEditingTaskDescription(e.target.value)} className="input" rows={2} />
                             {(isCreator(t) || isAssignee(t)) && (
                               <select value={editingTaskStatus} onChange={(e) => setEditingTaskStatus(e.target.value)} className="input" style={{ fontSize: 12 }}>
-                                {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                {STATUS_OPTIONS.map(st => <option key={st} value={st}>{st}</option>)}
                               </select>
                             )}
                             <div style={{ display: "flex", gap: 8 }}>
@@ -551,20 +510,20 @@ export default function ChatScreen({ userId, chat, onBack }) {
                               {(isCreator(t) || isAssignee(t)) ? (
                                 <select value={t.status} className="input" style={{ fontSize: 11, padding: "2px 24px 2px 8px", height: 26, width: "auto" }}
                                   onChange={async (e) => {
-                                    const newStatus = e.target.value;
-                                    setTasks((prev) => prev.map((task) => task.id === t.id ? { ...task, status: newStatus } : task));
-                                    try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: newStatus }) }); }
-                                    catch { setTasks((prev) => prev.map((task) => task.id === t.id ? { ...task, status: t.status } : task)); }
+                                    const ns = e.target.value;
+                                    setTasks((p) => p.map((tk) => tk.id === t.id ? { ...tk, status: ns } : tk));
+                                    try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: ns }) }); }
+                                    catch { setTasks((p) => p.map((tk) => tk.id === t.id ? { ...tk, status: t.status } : tk)); }
                                   }}>
-                                  {STATUS_OPTIONS.map(s => <option key={s} value={s}>{s}</option>)}
+                                  {STATUS_OPTIONS.map(st => <option key={st} value={st}>{st}</option>)}
                                 </select>
                               ) : <StatusPill status={t.status} />}
                               <select value={t.priority} className="input" style={{ fontSize: 11, padding: "2px 24px 2px 8px", height: 26, width: "auto" }}
                                 onChange={async (e) => {
-                                  const newPriority = e.target.value;
-                                  setTasks((prev) => prev.map((task) => task.id === t.id ? { ...task, priority: newPriority } : task));
-                                  try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: newPriority }) }); }
-                                  catch { setTasks((prev) => prev.map((task) => task.id === t.id ? { ...task, priority: t.priority } : task)); }
+                                  const np = e.target.value;
+                                  setTasks((p) => p.map((tk) => tk.id === t.id ? { ...tk, priority: np } : tk));
+                                  try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: np }) }); }
+                                  catch { setTasks((p) => p.map((tk) => tk.id === t.id ? { ...tk, priority: t.priority } : tk)); }
                                 }}>
                                 {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
                               </select>
@@ -580,14 +539,14 @@ export default function ChatScreen({ userId, chat, onBack }) {
                       </div>
                     );
                   })}
-                </>
+                </div>
               )}
             </div>
           </div>
         </div>
       )}
 
-      {/* ======= CREATE TASK MODAL ======= */}
+      {/* CREATE TASK */}
       {taskModalOpen && (
         <div className="modal-backdrop">
           <div className="modal" style={{ maxWidth: 420 }}>
@@ -596,16 +555,13 @@ export default function ChatScreen({ userId, chat, onBack }) {
               <button className="modal-close" onClick={() => setTaskModalOpen(false)}>✕</button>
             </div>
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <div className="field">
-                <label>Название</label>
+              <div className="field"><label>Название</label>
                 <input value={taskTitle} onChange={(e) => setTaskTitle(e.target.value)} placeholder="Название задачи" className="input" />
               </div>
-              <div className="field">
-                <label>Описание</label>
+              <div className="field"><label>Описание</label>
                 <textarea value={taskDescription} onChange={(e) => setTaskDescription(e.target.value)} placeholder="Описание" rows={3} className="input" />
               </div>
-              <div className="field">
-                <label>Исполнители</label>
+              <div className="field"><label>Исполнители</label>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 140, overflowY: "auto" }}>
                   {members.map((u) => (
                     <label key={u.id} style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, cursor: "pointer" }}>
@@ -631,7 +587,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
         </div>
       )}
 
-      {/* ======= PROFILE MODAL ======= */}
+      {/* PROFILE */}
       {profileUser && (
         <div className="modal-backdrop">
           <div className="modal" style={{ maxWidth: 320 }}>
@@ -653,7 +609,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
         </div>
       )}
 
-      {/* ======= ADD USER MODAL ======= */}
+      {/* ADD USER */}
       {addUserOpen && chat.chat_type !== "private" && (
         <div className="modal-backdrop">
           <div className="modal" style={{ maxWidth: 380 }}>
@@ -662,7 +618,9 @@ export default function ChatScreen({ userId, chat, onBack }) {
               <button className="modal-close" onClick={() => setAddUserOpen(false)}>✕</button>
             </div>
             {loadingUsers ? (
-              <div style={{ display: "flex", gap: 8, padding: "8px 0", alignItems: "center" }}><span className="spinner" /><span style={{ fontSize: 12, color: "var(--c-ink-muted)" }}>Загрузка...</span></div>
+              <div style={{ display: "flex", gap: 8, padding: "8px 0", alignItems: "center" }}>
+                <span className="spinner" /><span style={{ fontSize: 12, color: "var(--c-ink-muted)" }}>Загрузка...</span>
+              </div>
             ) : (
               <select value={selectedUserId} onChange={(e) => setSelectedUserId(e.target.value)} className="input">
                 <option value="">— Выберите пользователя —</option>
@@ -691,31 +649,27 @@ export default function ChatScreen({ userId, chat, onBack }) {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  page: { display: "flex", flexDirection: "column", height: "100vh", background: "var(--c-surface)", overflow: "hidden" },
-  header: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
-    padding: "10px 16px", background: "var(--c-paper)",
-    borderBottom: "1px solid var(--c-line)", flexShrink: 0, flexWrap: "wrap",
-  },
-  headerLeft: { display: "flex", alignItems: "center", gap: 10 },
-  chatTitle: { fontSize: 15, fontWeight: 600, color: "var(--c-ink)" },
-  memberPills: { display: "flex", gap: 4, flexWrap: "wrap" },
-  memberPill: { cursor: "pointer", border: "2px solid var(--c-paper)", transition: "transform var(--t-fast)" },
-  headerRight: { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  onlineDot: { fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 500 },
-  messagesArea: { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 8 },
-  msgRow: { display: "flex", alignItems: "flex-end", gap: 8 },
-  systemMsg: { textAlign: "center", fontSize: 11, color: "var(--c-ink-ghost)", fontStyle: "italic", padding: "4px 0", margin: "4px 0" },
-  bubble: { maxWidth: 480, padding: "9px 13px", borderRadius: 16, fontSize: 13, lineHeight: 1.5 },
-  bubbleSelf: { background: "var(--c-accent)", color: "#fff", borderBottomRightRadius: 4 },
-  bubbleOther: { background: "var(--c-paper)", color: "var(--c-ink)", border: "1px solid var(--c-line)", borderBottomLeftRadius: 4 },
-  bubbleDeleted: { background: "var(--c-surface)", color: "var(--c-ink-ghost)", border: "1px solid var(--c-line)", fontStyle: "italic" },
-  deletedText: { fontStyle: "italic", color: "var(--c-ink-ghost)" },
-  msgMeta: { display: "flex", gap: 4, fontSize: 10, marginTop: 4, justifyContent: "flex-end", alignItems: "center" },
-  inlineEdit: { background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 6, padding: "3px 8px", color: "#fff", fontSize: 13, outline: "none", minWidth: 160 },
-  footer: { background: "var(--c-paper)", borderTop: "1px solid var(--c-line)", padding: "8px 16px 12px", flexShrink: 0 },
-  typingRow: { height: 22, marginBottom: 6 },
+  page:            { display: "flex", flexDirection: "column", height: "100vh", background: "var(--c-surface)", overflow: "hidden" },
+  header:          { display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 16px", background: "var(--c-paper)", borderBottom: "1px solid var(--c-line)", flexShrink: 0, flexWrap: "wrap" },
+  headerLeft:      { display: "flex", alignItems: "center", gap: 10 },
+  chatTitle:       { fontSize: 15, fontWeight: 600, color: "var(--c-ink)" },
+  memberPills:     { display: "flex", gap: 4, flexWrap: "wrap" },
+  memberPill:      { cursor: "pointer", border: "2px solid var(--c-paper)", transition: "transform var(--t-fast)" },
+  headerRight:     { display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  onlineDot:       { fontSize: 11, fontFamily: "var(--font-mono)", fontWeight: 500 },
+  messagesArea:    { flex: 1, overflowY: "auto", padding: "16px", display: "flex", flexDirection: "column", gap: 8 },
+  msgRow:          { display: "flex", alignItems: "flex-end", gap: 8 },
+  systemMsg:       { textAlign: "center", fontSize: 11, color: "var(--c-ink-ghost)", fontStyle: "italic", padding: "4px 0", margin: "4px 0" },
+  bubble:          { maxWidth: 480, padding: "9px 13px", borderRadius: 16, fontSize: 13, lineHeight: 1.5 },
+  bubbleSelf:      { background: "var(--c-accent)", color: "#fff", borderBottomRightRadius: 4 },
+  bubbleOther:     { background: "var(--c-paper)", color: "var(--c-ink)", border: "1px solid var(--c-line)", borderBottomLeftRadius: 4 },
+  bubbleDeleted:   { background: "var(--c-surface)", color: "var(--c-ink-ghost)", border: "1px solid var(--c-line)", fontStyle: "italic" },
+  deletedText:     { fontStyle: "italic", color: "var(--c-ink-ghost)" },
+  msgMeta:         { display: "flex", gap: 4, fontSize: 10, marginTop: 4, justifyContent: "flex-end", alignItems: "center" },
+  inlineEdit:      { background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)", borderRadius: 6, padding: "3px 8px", color: "#fff", fontSize: 13, outline: "none", minWidth: 160 },
+  footer:          { background: "var(--c-paper)", borderTop: "1px solid var(--c-line)", padding: "8px 16px 12px", flexShrink: 0 },
+  typingRow:       { height: 22, marginBottom: 6 },
   typingIndicator: { fontSize: 11, color: "var(--c-ink-muted)", fontStyle: "italic", background: "var(--c-surface)", padding: "2px 10px", borderRadius: "var(--r-full)" },
-  inputRow: { display: "flex", gap: 8, alignItems: "center" },
-  attachBtn: { width: 40, height: 40, border: "1px solid var(--c-line)", borderRadius: "var(--r-full)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, cursor: "pointer", background: "var(--c-surface)", flexShrink: 0 },
+  inputRow:        { display: "flex", gap: 8, alignItems: "center" },
+  attachBtn:       { width: 40, height: 40, border: "1px solid var(--c-line)", borderRadius: "var(--r-full)", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, cursor: "pointer", background: "var(--c-surface)", flexShrink: 0 },
 };
