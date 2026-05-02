@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import "../design.css";
 
 export default function LoginScreen({
   onLogin,
@@ -10,10 +11,12 @@ export default function LoginScreen({
   const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setLoading(true);
 
     try {
       const res = await fetch(
@@ -59,7 +62,6 @@ export default function LoginScreen({
       }
 
       const userId = meJson.data.id;
-
       if (!userId) {
         setError("В ответе от /users/me/ нет user_id");
         return;
@@ -67,61 +69,136 @@ export default function LoginScreen({
 
       onLogin(accessToken, Number(userId), refreshToken);
     } catch (err) {
-      console.error("Login error:", err);
       setError("Не удалось выполнить вход. Проверьте подключение к серверу.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white/95 backdrop-blur-md p-8 rounded-2xl shadow-lg w-full max-w-sm border border-gray-200"
-      >
-        <h2 className="text-2xl font-semibold mb-6 text-gray-800 text-center">
-          Вход в систему
-        </h2>
+    <div style={styles.page}>
+      <div style={styles.left}>
+        <div style={styles.brand}>
+          <span style={styles.brandMark}>✦</span>
+          <span style={styles.brandName}>messenger</span>
+        </div>
+        <p style={styles.tagline}>Чаты. Задачи.<br />Всё в одном месте.</p>
+      </div>
 
-        <label className="block text-sm mb-1 text-gray-700">
-          Email или логин
-        </label>
-        <input
-          value={loginValue}
-          onChange={(e) => setLoginValue(e.target.value)}
-          className="w-full border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300 transition rounded-lg p-2 mb-4 text-gray-900 placeholder-gray-400 outline-none"
-          placeholder="Введите email или логин"
-        />
-
-        <label className="block text-sm mb-1 text-gray-700">Пароль</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full border border-gray-300 focus:border-blue-500 focus:ring-2 focus:ring-blue-300 transition rounded-lg p-2 mb-4 text-gray-900 placeholder-gray-400 outline-none"
-          placeholder="Введите пароль"
-        />
-
-        {error && (
-          <div className="text-red-600 bg-red-50 border border-red-200 rounded-lg p-2 mb-4 text-sm text-center">
-            {error}
+      <div style={styles.right}>
+        <form onSubmit={handleSubmit} style={styles.card} className="card">
+          <div style={styles.cardHeader}>
+            <h2 style={styles.title}>Вход в систему</h2>
+            <p style={styles.subtitle}>Введите ваши данные для входа</p>
           </div>
-        )}
 
-        <button
-          type="submit"
-          className="w-full bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white p-2.5 rounded-lg font-semibold shadow transition-all mb-3"
-        >
-          Войти
-        </button>
+          <div style={styles.fields}>
+            <div className="field">
+              <label>Email или логин</label>
+              <input
+                value={loginValue}
+                onChange={(e) => setLoginValue(e.target.value)}
+                className="input"
+                placeholder="Введите email или логин"
+                autoComplete="username"
+              />
+            </div>
 
-        <button
-          type="button"
-          onClick={onGoRegister}
-          className="w-full bg-gray-200 hover:bg-gray-300 active:bg-gray-400 text-gray-800 p-2.5 rounded-lg font-semibold transition-all"
-        >
-          Создать аккаунт
-        </button>
-      </form>
+            <div className="field">
+              <label>Пароль</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                placeholder="Введите пароль"
+                autoComplete="current-password"
+              />
+            </div>
+          </div>
+
+          {error && <div className="alert alert-error">{error}</div>}
+
+          <div style={styles.actions}>
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={loading}
+              style={{ width: "100%", height: "40px", fontSize: "14px" }}
+            >
+              {loading ? <span className="spinner" /> : "Войти"}
+            </button>
+
+            <button
+              type="button"
+              className="btn"
+              onClick={onGoRegister}
+              style={{ width: "100%", height: "40px", fontSize: "14px" }}
+            >
+              Создать аккаунт
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    background: "var(--c-surface)",
+  },
+  left: {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    padding: "64px 56px",
+    background: "var(--c-ink)",
+    gap: 24,
+  },
+  brand: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    color: "#fff",
+  },
+  brandMark: {
+    fontSize: 22,
+    color: "#93c5fd",
+  },
+  brandName: {
+    fontSize: 18,
+    fontWeight: 600,
+    fontFamily: "var(--font-mono)",
+    letterSpacing: "0.04em",
+  },
+  tagline: {
+    fontSize: 36,
+    fontWeight: 600,
+    color: "#fff",
+    lineHeight: 1.25,
+    letterSpacing: "-0.02em",
+  },
+  right: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: "32px 24px",
+  },
+  card: {
+    width: "100%",
+    maxWidth: 380,
+    padding: 32,
+    display: "flex",
+    flexDirection: "column",
+    gap: 20,
+  },
+  cardHeader: { display: "flex", flexDirection: "column", gap: 4 },
+  title: { fontSize: 20, fontWeight: 600, color: "var(--c-ink)" },
+  subtitle: { fontSize: 13, color: "var(--c-ink-muted)" },
+  fields: { display: "flex", flexDirection: "column", gap: 14 },
+  actions: { display: "flex", flexDirection: "column", gap: 8 },
+};

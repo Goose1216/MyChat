@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import "../design.css";
 
 export default function RegistrationScreen({
   onGoLogin,
@@ -9,14 +10,15 @@ export default function RegistrationScreen({
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
-
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [loading, setLoading] = useState(false);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
     setSuccess("");
+    setLoading(true);
 
     try {
       const res = await fetch(
@@ -24,12 +26,7 @@ export default function RegistrationScreen({
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            username,
-            email,
-            phone,
-            password,
-          }),
+          body: JSON.stringify({ username, email, phone, password }),
         }
       );
 
@@ -42,81 +39,141 @@ export default function RegistrationScreen({
 
       setSuccess("Регистрация успешна! Теперь вы можете войти.");
     } catch (err) {
-      console.error(err);
       setError("Не удалось выполнить регистрацию.");
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-green-50 to-green-100">
-      <form
-        onSubmit={handleRegister}
-        className="bg-white/95 backdrop-blur-md p-8 rounded-2xl shadow-lg w-full max-w-sm border border-gray-200"
-      >
-        <h2 className="text-2xl font-semibold mb-6 text-gray-800 text-center">
-          Создание аккаунта
-        </h2>
+    <div style={styles.page}>
+      <div style={styles.left}>
+        <div style={styles.brand}>
+          <span style={styles.brandMark}>✦</span>
+          <span style={styles.brandName}>messenger</span>
+        </div>
+        <p style={styles.tagline}>Создайте аккаунт и начните общаться.</p>
+      </div>
 
-        <label className="block text-sm mb-1 text-gray-700">Логин</label>
-        <input
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg p-2 mb-4 text-gray-900"
-          placeholder="Введите логин"
-        />
-
-        <label className="block text-sm mb-1 text-gray-700">Email</label>
-        <input
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg p-2 mb-4 text-gray-900 placeholder-gray-400 "
-          placeholder="Введите email"
-        />
-
-        <label className="block text-sm mb-1 text-gray-700">Телефон</label>
-        <input
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg p-2 mb-4 text-gray-900 placeholder-gray-400 "
-          placeholder="В международном формате, пример: +79000000000"
-        />
-
-        <label className="block text-sm mb-1 text-gray-700">Пароль</label>
-        <input
-          type="password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full border border-gray-300 rounded-lg p-2 mb-4 text-gray-900 placeholder-gray-400 "
-          placeholder="Введите пароль"
-        />
-
-        {error && (
-          <div className="text-red-600 bg-red-50 border border-red-200 p-2 rounded-lg mb-4 text-center text-sm">
-            {error}
+      <div style={styles.right}>
+        <form onSubmit={handleRegister} style={styles.card} className="card">
+          <div style={styles.cardHeader}>
+            <h2 style={styles.title}>Создание аккаунта</h2>
+            <p style={styles.subtitle}>Заполните все поля для регистрации</p>
           </div>
-        )}
 
-        {success && (
-          <div className="text-green-700 bg-green-50 border border-green-200 p-2 rounded-lg mb-4 text-center text-sm">
-            {success}
+          <div style={styles.fields}>
+            <div className="field">
+              <label>Логин</label>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="input"
+                placeholder="Введите логин"
+                autoComplete="username"
+              />
+            </div>
+
+            <div className="field">
+              <label>Email</label>
+              <input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="input"
+                placeholder="Введите email"
+                type="email"
+                autoComplete="email"
+              />
+            </div>
+
+            <div className="field">
+              <label>Телефон</label>
+              <input
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                className="input"
+                placeholder="+79000000000"
+                type="tel"
+                autoComplete="tel"
+              />
+            </div>
+
+            <div className="field">
+              <label>Пароль</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                className="input"
+                placeholder="Введите пароль"
+                autoComplete="new-password"
+              />
+            </div>
           </div>
-        )}
 
-        <button
-          type="submit"
-          className="w-full bg-green-600 hover:bg-green-700 text-white p-2.5 rounded-lg font-semibold shadow mb-3"
-        >
-          Зарегистрироваться
-        </button>
+          {error && <div className="alert alert-error">{error}</div>}
+          {success && <div className="alert alert-success">{success}</div>}
 
-        <button
-          type="button"
-          onClick={onGoLogin}
-          className="w-full bg-gray-200 hover:bg-gray-300 text-gray-800 p-2.5 rounded-lg font-semibold"
-        >
-          Уже есть аккаунт
-        </button>
-      </form>
+          <div style={styles.actions}>
+            {success ? (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={onGoLogin}
+                style={{ width: "100%", height: "40px", fontSize: "14px" }}
+              >
+                Перейти ко входу
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={loading}
+                style={{ width: "100%", height: "40px", fontSize: "14px", background: "var(--c-success)", borderColor: "var(--c-success)" }}
+              >
+                {loading ? <span className="spinner" style={{ borderTopColor: "#fff" }} /> : "Зарегистрироваться"}
+              </button>
+            )}
+
+            <button
+              type="button"
+              className="btn"
+              onClick={onGoLogin}
+              style={{ width: "100%", height: "40px", fontSize: "14px" }}
+            >
+              Уже есть аккаунт
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   );
 }
+
+const styles: Record<string, React.CSSProperties> = {
+  page: {
+    minHeight: "100vh",
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr",
+    background: "var(--c-surface)",
+  },
+  left: {
+    display: "flex",
+    flexDirection: "column",
+    justifyContent: "center",
+    padding: "64px 56px",
+    background: "var(--c-ink)",
+    gap: 24,
+  },
+  brand: { display: "flex", alignItems: "center", gap: 10, color: "#fff" },
+  brandMark: { fontSize: 22, color: "#93c5fd" },
+  brandName: { fontSize: 18, fontWeight: 600, fontFamily: "var(--font-mono)", letterSpacing: "0.04em" },
+  tagline: { fontSize: 32, fontWeight: 600, color: "#fff", lineHeight: 1.3, letterSpacing: "-0.02em" },
+  right: { display: "flex", alignItems: "center", justifyContent: "center", padding: "32px 24px" },
+  card: { width: "100%", maxWidth: 380, padding: 32, display: "flex", flexDirection: "column", gap: 20 },
+  cardHeader: { display: "flex", flexDirection: "column", gap: 4 },
+  title: { fontSize: 20, fontWeight: 600, color: "var(--c-ink)" },
+  subtitle: { fontSize: 13, color: "var(--c-ink-muted)" },
+  fields: { display: "flex", flexDirection: "column", gap: 14 },
+  actions: { display: "flex", flexDirection: "column", gap: 8 },
+};

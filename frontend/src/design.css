@@ -1,0 +1,296 @@
+/* ============================================
+   DESIGN SYSTEM — Messenger App
+   Aesthetic: Clean slate · ink & paper · mono
+   ============================================ */
+
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&display=swap');
+
+:root {
+  /* Brand */
+  --c-ink:        #0f0f0f;
+  --c-ink-soft:   #3a3a3a;
+  --c-ink-muted:  #6b6b6b;
+  --c-ink-ghost:  #a8a8a8;
+  --c-paper:      #fafaf8;
+  --c-surface:    #f2f2ef;
+  --c-line:       #e4e4e0;
+  --c-line-soft:  #efefeb;
+
+  /* Accent — single pop of blue */
+  --c-accent:     #2563eb;
+  --c-accent-bg:  #eff4ff;
+  --c-accent-hover: #1d4ed8;
+
+  /* Semantic */
+  --c-success:    #16a34a;
+  --c-success-bg: #f0fdf4;
+  --c-warning:    #d97706;
+  --c-warning-bg: #fffbeb;
+  --c-danger:     #dc2626;
+  --c-danger-bg:  #fef2f2;
+
+  /* Status pills */
+  --c-new:        #2563eb;
+  --c-new-bg:     #eff4ff;
+  --c-prog:       #d97706;
+  --c-prog-bg:    #fffbeb;
+  --c-done:       #16a34a;
+  --c-done-bg:    #f0fdf4;
+  --c-cancel:     #6b6b6b;
+  --c-cancel-bg:  #f2f2ef;
+
+  /* Typography */
+  --font-sans: 'IBM Plex Sans', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+
+  /* Radius */
+  --r-sm:   6px;
+  --r-md:   10px;
+  --r-lg:   16px;
+  --r-xl:   22px;
+  --r-full: 9999px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08), 0 2px 4px rgba(0,0,0,0.04);
+  --shadow-lg: 0 12px 32px rgba(0,0,0,0.10), 0 4px 8px rgba(0,0,0,0.04);
+
+  /* Transitions */
+  --t-fast: 120ms ease;
+  --t-base: 200ms ease;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-size: 14px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Scrollbar ---- */
+::-webkit-scrollbar { width: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--c-line); border-radius: var(--r-full); }
+
+/* ---- Shared atoms ---- */
+.card {
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-lg);
+  box-shadow: var(--shadow-sm);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--c-line);
+  background: var(--c-paper);
+  color: var(--c-ink-soft);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all var(--t-fast);
+  white-space: nowrap;
+  user-select: none;
+}
+.btn:hover { background: var(--c-surface); border-color: #ccc; }
+.btn:active { transform: scale(0.98); }
+
+.btn-primary {
+  background: var(--c-accent);
+  border-color: var(--c-accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--c-accent-hover); border-color: var(--c-accent-hover); }
+
+.btn-danger {
+  background: var(--c-danger-bg);
+  border-color: #fca5a5;
+  color: var(--c-danger);
+}
+.btn-danger:hover { background: #fee2e2; }
+
+.btn-success {
+  background: var(--c-success-bg);
+  border-color: #86efac;
+  color: var(--c-success);
+}
+.btn-success:hover { background: #dcfce7; }
+
+.btn-ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--c-accent);
+}
+.btn-ghost:hover { background: var(--c-accent-bg); }
+
+/* ---- Form inputs ---- */
+.input {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-md);
+  background: var(--c-surface);
+  color: var(--c-ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  outline: none;
+  transition: border-color var(--t-fast), box-shadow var(--t-fast);
+}
+.input:focus {
+  border-color: var(--c-accent);
+  box-shadow: 0 0 0 3px rgba(37,99,235,0.10);
+  background: var(--c-paper);
+}
+.input::placeholder { color: var(--c-ink-ghost); }
+
+textarea.input { resize: none; }
+
+select.input {
+  appearance: none;
+  cursor: pointer;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236b6b6b' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+/* ---- Field group ---- */
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field label { font-size: 12px; font-weight: 500; color: var(--c-ink-muted); }
+
+/* ---- Alerts ---- */
+.alert {
+  padding: 9px 12px;
+  border-radius: var(--r-md);
+  font-size: 12px;
+  font-weight: 500;
+}
+.alert-error   { background: var(--c-danger-bg);  border: 1px solid #fca5a5; color: var(--c-danger);  }
+.alert-success { background: var(--c-success-bg); border: 1px solid #86efac; color: var(--c-success); }
+
+/* ---- Status & priority pills ---- */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: var(--r-full);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+}
+.pill-new    { background: var(--c-new-bg);    color: var(--c-new);    }
+.pill-prog   { background: var(--c-prog-bg);   color: var(--c-prog);   }
+.pill-done   { background: var(--c-done-bg);   color: var(--c-done);   }
+.pill-cancel { background: var(--c-cancel-bg); color: var(--c-cancel); }
+
+.pill-low  { background: var(--c-surface); color: var(--c-ink-muted); border: 1px solid var(--c-line); }
+.pill-med  { background: var(--c-warning-bg); color: var(--c-warning); }
+.pill-high { background: var(--c-danger-bg);  color: var(--c-danger);  }
+
+/* ---- Avatar ---- */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 600;
+  flex-shrink: 0;
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+.avatar-sm  { width: 28px; height: 28px; font-size: 10px; }
+.avatar-md  { width: 36px; height: 36px; font-size: 13px; }
+.avatar-lg  { width: 52px; height: 52px; font-size: 17px; }
+.av-blue    { background: #dbeafe; color: #1d4ed8; }
+.av-teal    { background: #ccfbf1; color: #0f766e; }
+.av-amber   { background: #fef3c7; color: #b45309; }
+.av-purple  { background: #ede9fe; color: #6d28d9; }
+.av-rose    { background: #ffe4e6; color: #be123c; }
+.av-green   { background: #dcfce7; color: #15803d; }
+
+/* ---- Modal overlay ---- */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15,15,15,0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 16px;
+  backdrop-filter: blur(2px);
+}
+.modal {
+  background: var(--c-paper);
+  border: 1px solid var(--c-line);
+  border-radius: var(--r-xl);
+  box-shadow: var(--shadow-lg);
+  padding: 24px;
+  width: 100%;
+  animation: modalIn 180ms ease;
+}
+@keyframes modalIn {
+  from { opacity: 0; transform: translateY(8px) scale(0.98); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+.modal-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--c-ink);
+}
+.modal-close {
+  width: 28px; height: 28px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--c-line);
+  background: var(--c-surface);
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--c-ink-muted);
+  transition: all var(--t-fast);
+}
+.modal-close:hover { background: var(--c-danger-bg); color: var(--c-danger); }
+.modal-footer {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 20px;
+}
+
+/* ---- Loading spinner ---- */
+.spinner {
+  width: 18px; height: 18px;
+  border: 2px solid var(--c-line);
+  border-top-color: var(--c-accent);
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ---- Divider ---- */
+.divider { height: 1px; background: var(--c-line); margin: 4px 0; }
+
+/* ---- Mono label ---- */
+.mono { font-family: var(--font-mono); }
