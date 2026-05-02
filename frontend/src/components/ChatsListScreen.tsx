@@ -24,6 +24,81 @@ export default function ChatsListScreen({
   const [loading, setLoading] = useState(false);
   const { addHandler, removeHandler } = useWebSocket();
 
+const [typingChats, setTypingChats] = useState<
+  Record<number, Record<number, number>>
+>({});
+
+const handleTypingEvent = (wsMsg: any) => {
+  if (wsMsg.sender) {
+
+  setUsersMap(prev => ({
+
+    ...prev,
+
+    [wsMsg.sender.id]: wsMsg.sender,
+
+  }));
+
+}
+  if (wsMsg.type_of_message !== 3) return;
+
+  if (wsMsg.sender_id === userId) return;
+
+  setTypingChats(prev => {
+
+    const chatTyping = prev[wsMsg.chat_id] || {};
+
+    return {
+
+      ...prev,
+
+      [wsMsg.chat_id]: {
+
+        ...chatTyping,
+
+        [wsMsg.sender_id]: Date.now(),
+
+      },
+
+    };
+
+  });
+
+};
+
+
+const renderTyping = (chat: any) => {
+
+  const users = typingChats[chat.id];
+
+  if (!users) return null;
+
+  const ids = Object.keys(users).map(Number);
+
+  if (ids.length === 0) return null;
+
+  const names = ids
+
+    .map(id => usersMap[id]?.username || "Кто-то")
+
+    .slice(0, 2);
+
+  if (ids.length === 1) {
+
+    return `${names[0]} печатает...`;
+
+  }
+
+  if (ids.length === 2) {
+
+    return `${names[0]} и ${names[1]} печатают...`;
+
+  }
+
+  return `${names[0]}, ${names[1]} и ещё печатают...`;
+
+};
+
   const fetchChats = async () => {
     if (!access_token) return;
     setLoading(true);
@@ -66,20 +141,44 @@ export default function ChatsListScreen({
 
 };
 
-  useEffect(() => {
-
+useEffect(() => {
   addHandler(updateChatLastMessage);
-
   addHandler(handleReadEvent);
+  addHandler(handleTypingEvent);
 
   return () => {
-
     removeHandler(updateChatLastMessage);
-
     removeHandler(handleReadEvent);
-
+    removeHandler(handleTypingEvent);
   };
+}, []);
 
+useEffect(() => {
+  const interval = setInterval(() => {
+    const now = Date.now();
+
+    setTypingChats(prev => {
+      const next: typeof prev = {};
+
+      for (const [chatId, users] of Object.entries(prev)) {
+        const validUsers: Record<number, number> = {};
+
+        for (const [userId, ts] of Object.entries(users)) {
+          if (now - ts < 1500) {
+            validUsers[Number(userId)] = ts;
+          }
+        }
+
+        if (Object.keys(validUsers).length > 0) {
+          next[Number(chatId)] = validUsers;
+        }
+      }
+
+      return next;
+    });
+  }, 300);
+
+  return () => clearInterval(interval);
 }, []);
 
 const handleSelectChat = async (chat: any) => {
@@ -111,7 +210,21 @@ const handleSelectChat = async (chat: any) => {
     return "Нет сообщений";
   };
 
+const [usersMap, setUsersMap] = useState<Record<number, any>>({});
+
 const updateChatLastMessage = (wsMsg: any) => {
+  if (wsMsg.sender) {
+
+    setUsersMap(prev => ({
+
+      ...prev,
+
+      [wsMsg.sender.id]: wsMsg.sender,
+
+    }));
+
+  }
+
   if (wsMsg.type_of_message !== 0) return;
 
   setChats(prev => {
@@ -228,7 +341,9 @@ const updateChatLastMessage = (wsMsg: any) => {
                 </div>
                 <div style={styles.chatInfo}>
                   <div style={styles.chatName}>{chat.title || `Чат #${chat.id}`}</div>
-                  <div style={styles.chatPreview}>{getLastMessagePreview(chat)}</div>
+                  <div style={styles.chatPreview}>
+                    {renderTyping(chat) || getLastMessagePreview(chat)}
+                 </div>
                 </div>
                 <div style={styles.chatRight}>
                   {chat.cnt_unread_messages > 0 && (
