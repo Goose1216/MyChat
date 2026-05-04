@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import CreateChatScreen from "./CreateChatScreen";
 import TaskStatsPanel from "./TaskStatsPanel";
+import BrandLogo from "./BrandLogo";
 import { fetchWithAuth } from "../api";
 import { useWebSocket } from "../Websocket";
 import "../design.css";
@@ -20,181 +21,110 @@ export default function ChatsListScreen({
   onLogout: () => void;
   onOpenProfile: () => void;
 }) {
-  const [chats, setChats] = useState<any[]>([]);
+  const [chats, setChats]               = useState<any[]>([]);
   const [showCreateChat, setShowCreateChat] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const { addHandler, removeHandler } = useWebSocket();
+  const [loading, setLoading]           = useState(false);
+  const [search, setSearch]             = useState("");
+  const { addHandler, removeHandler }   = useWebSocket();
 
-  const [usersMap, setUsersMap] = useState<Record<number, any>>({});
-const [typingChats, setTypingChats] = useState<
-  Record<number, Record<number, number>>
->({});
+  const [usersMap, setUsersMap]         = useState<Record<number, any>>({});
+  const [typingChats, setTypingChats]   = useState<Record<number, Record<number, number>>>({});
 
-const handleTypingEvent = (wsMsg: any) => {
-  if (wsMsg.sender) {
-
-  setUsersMap(prev => ({
-
-    ...prev,
-
-    [wsMsg.sender.id]: wsMsg.sender,
-
-  }));
-
-}
-  if (wsMsg.type_of_message !== 3) return;
-  if (wsMsg.sender_id === userId) return;
-  setTypingChats(prev => {
-    const chatTyping = prev[wsMsg.chat_id] || {};
-    return {
+  const handleTypingEvent = (wsMsg: any) => {
+    if (wsMsg.sender) setUsersMap(prev => ({ ...prev, [wsMsg.sender.id]: wsMsg.sender }));
+    if (wsMsg.type_of_message !== 3) return;
+    if (wsMsg.sender_id === userId) return;
+    setTypingChats(prev => ({
       ...prev,
-      [wsMsg.chat_id]: {
-        ...chatTyping,
-        [wsMsg.sender_id]: Date.now(),
-      },
-    };
-  });
-};
+      [wsMsg.chat_id]: { ...(prev[wsMsg.chat_id] || {}), [wsMsg.sender_id]: Date.now() },
+    }));
+  };
 
-  // ── Global stats ───────────────────────────────────────────────────────────
-  const [showGlobalStats, setShowGlobalStats] = useState(false);
-  const [globalStats, setGlobalStats] = useState<any[]>([]);
+  const [showGlobalStats, setShowGlobalStats]   = useState(false);
+  const [globalStats, setGlobalStats]           = useState<any[]>([]);
   const [loadingGlobalStats, setLoadingGlobalStats] = useState(false);
 
   const loadGlobalStats = async () => {
-    if (globalStats.length) return; // already loaded — refresh manually if needed
+    if (globalStats.length) return;
     setLoadingGlobalStats(true);
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/tasks/stats/`);
-      if (res.ok) {
-        const data = await res.json();
-        setGlobalStats(data.data ?? []);
-      }
-    } catch { /* silent */ }
+      if (res.ok) { const data = await res.json(); setGlobalStats(data.data ?? []); }
+    } catch { }
     finally { setLoadingGlobalStats(false); }
   };
 
-  const openGlobalStats = () => {
-    setShowGlobalStats(true);
-    loadGlobalStats();
+  const refreshGlobalStats = async () => {
+    setGlobalStats([]); setLoadingGlobalStats(true);
+    try {
+      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/tasks/stats/`);
+      if (res.ok) { const data = await res.json(); setGlobalStats(data.data ?? []); }
+    } catch { }
+    finally { setLoadingGlobalStats(false); }
   };
 
   const renderTyping = (chat: any) => {
-  const users = typingChats[chat.id];
-  if (!users) return null;
-
-  const ids = Object.keys(users).map(Number);
-
-  if (ids.length === 0) return null;
-
-  const names = ids
-    .map(id => usersMap[id]?.username || "Кто-то")
-    .slice(0, 2);
-
-  if (ids.length === 1) {
-    return `${names[0]} печатает...`;
-  }
-
-  if (ids.length === 2) {
-    return `${names[0]} и ${names[1]} печатают...`;
-  }
-
-  return `${names[0]}, ${names[1]} и ещё печатают...`;
-};
-
-  const refreshGlobalStats = async () => {
-    setGlobalStats([]);
-    setLoadingGlobalStats(true);
-    try {
-      const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/tasks/stats/`);
-      if (res.ok) {
-        const data = await res.json();
-        setGlobalStats(data.data ?? []);
-      }
-    } catch { /* silent */ }
-    finally { setLoadingGlobalStats(false); }
+    const users = typingChats[chat.id];
+    if (!users) return null;
+    const ids = Object.keys(users).map(Number);
+    if (ids.length === 0) return null;
+    const names = ids.map(id => usersMap[id]?.username || "Кто-то").slice(0, 2);
+    if (ids.length === 1) return `${names[0]} печатает…`;
+    if (ids.length === 2) return `${names[0]} и ${names[1]} печатают…`;
+    return `${names[0]}, ${names[1]} и ещё…`;
   };
 
-  // ── Chats ──────────────────────────────────────────────────────────────────
   const fetchChats = async () => {
     if (!access_token) return;
     setLoading(true);
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/chats`, { method: "GET" });
-      if (res.ok) {
-        const responseData = await res.json();
-        setChats(responseData.data ?? []);
-      } else if (res.status === 401) {
-        alert("Сессия истекла. Авторизуйтесь снова.");
-        onLogout();
-      }
-    } catch { /* silent */ }
+      if (res.ok) { const d = await res.json(); setChats(d.data ?? []); }
+      else if (res.status === 401) { alert("Сессия истекла."); onLogout(); }
+    } catch { }
     finally { setLoading(false); }
   };
 
   useEffect(() => { fetchChats(); }, []);
 
   useEffect(() => {
-  const interval = setInterval(() => {
-    const now = Date.now();
-
-    setTypingChats(prev => {
-      const next: typeof prev = {};
-
-      for (const [chatId, users] of Object.entries(prev)) {
-        const validUsers: Record<number, number> = {};
-
-        for (const [userId, ts] of Object.entries(users)) {
-          if (now - ts < 1500) {
-            validUsers[Number(userId)] = ts;
+    const interval = setInterval(() => {
+      const now = Date.now();
+      setTypingChats(prev => {
+        const next: typeof prev = {};
+        for (const [chatId, users] of Object.entries(prev)) {
+          const valid: Record<number, number> = {};
+          for (const [uid, ts] of Object.entries(users)) {
+            if (now - ts < 1500) valid[Number(uid)] = ts;
           }
+          if (Object.keys(valid).length > 0) next[Number(chatId)] = valid;
         }
+        return next;
+      });
+    }, 300);
+    return () => clearInterval(interval);
+  }, []);
 
-        if (Object.keys(validUsers).length > 0) {
-          next[Number(chatId)] = validUsers;
-        }
-      }
-
-      return next;
-    });
-  }, 300);
-
-  return () => clearInterval(interval);
-}, []);
-
-  useEffect(() => {
-  addHandler(handleTypingEvent);
-
-  return () => {
-    removeHandler(handleTypingEvent);
-  };
-}, []);
+  useEffect(() => { addHandler(handleTypingEvent); return () => removeHandler(handleTypingEvent); }, []);
 
   const getLastMessagePreview = (chat: any) => {
     const msg = chat.last_message;
     if (!msg) return "Нет сообщений";
     const senderName = msg.sender && msg.sender.id !== userId ? `${msg.sender.username}: ` : "Вы: ";
-    if (msg.content) {
-      return senderName + (msg.content.length > 28 ? msg.content.slice(0, 28) + "…" : msg.content);
-    }
-    if (msg.file) return senderName + `📎 ${msg.file.filename.slice(0, 20)}`;
+    if (msg.content) return senderName + (msg.content.length > 30 ? msg.content.slice(0, 30) + "…" : msg.content);
+    if (msg.file)    return senderName + `📎 ${msg.file.filename.slice(0, 20)}`;
     return "Нет сообщений";
   };
 
   const updateChatLastMessage = (wsMsg: any) => {
-      if (wsMsg.sender) {
-        setUsersMap(prev => ({
-          ...prev,
-          [wsMsg.sender.id]: wsMsg.sender,
-        }));
-     }
+    if (wsMsg.sender) setUsersMap(prev => ({ ...prev, [wsMsg.sender.id]: wsMsg.sender }));
     if (wsMsg.type_of_message !== 0) return;
-    setChats((prev) => {
-      const idx = prev.findIndex((c) => c.id === wsMsg.chat_id);
+    setChats(prev => {
+      const idx = prev.findIndex(c => c.id === wsMsg.chat_id);
       if (idx === -1) return prev;
       const chat = prev[idx];
       const isForeign = wsMsg.sender_id !== userId;
-      const updatedChat = {
+      const updated = {
         ...chat,
         last_message: {
           chat_id: wsMsg.chat_id, sender_id: wsMsg.sender_id,
@@ -208,157 +138,148 @@ const handleTypingEvent = (wsMsg: any) => {
       };
       const next = [...prev];
       next.splice(idx, 1);
-      return [updatedChat, ...next];
+      return [updated, ...next];
     });
   };
 
-  useEffect(() => {
-    addHandler(updateChatLastMessage);
-    return () => removeHandler(updateChatLastMessage);
-  }, []);
+  useEffect(() => { addHandler(updateChatLastMessage); return () => removeHandler(updateChatLastMessage); }, []);
 
   const handleChatCreated = () => { setShowCreateChat(false); fetchChats(); };
 
-  const getAvClass = (id: number) => AVATAR_CLASSES[id % AVATAR_CLASSES.length];
-  const getInitials = (chat: any) => (chat.title || `#${chat.id}`).slice(0, 2).toUpperCase();
+  const getAvClass   = (id: number) => AVATAR_CLASSES[id % AVATAR_CLASSES.length];
+  const getInitials  = (chat: any) => (chat.title || `#${chat.id}`).slice(0, 2).toUpperCase();
+  const totalUnread  = chats.reduce((n, c) => n + (c.cnt_unread_messages ?? 0), 0);
 
-  // ── total unread badge for sidebar ─────────────────────────────────────────
-  const totalUnread = chats.reduce((n, c) => n + (c.cnt_unread_messages ?? 0), 0);
+  const filtered = search.trim()
+    ? chats.filter(c => (c.title || `Чат #${c.id}`).toLowerCase().includes(search.toLowerCase()))
+    : chats;
 
   return (
-    <div style={st.page}>
-      {/* ── SIDEBAR ── */}
-      <aside style={st.sidebar}>
-        <div style={st.sidebarHeader}>
-          <span style={st.brandMark}>✦</span>
-          <span style={st.brandName}>messenger</span>
+    <div style={s.page}>
+      {/* ── Sidebar ── */}
+      <aside style={s.sidebar}>
+        <div style={s.sidebarTop}>
+          <BrandLogo size="sm" showText={true} onDark={true} />
         </div>
 
-        <nav style={st.nav}>
-          <button className="btn" style={st.navItemActive}>
-            <span>💬</span>
-            <span>Чаты</span>
+        <nav style={s.nav}>
+          <button className="btn" style={s.navActive}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+            Чаты
             {totalUnread > 0 && (
-              <span style={st.sidebarBadge}>{totalUnread > 99 ? "99+" : totalUnread}</span>
+              <span style={s.badge}>{totalUnread > 99 ? "99+" : totalUnread}</span>
             )}
           </button>
-          <button className="btn" onClick={onOpenProfile} style={st.navItem}>
-            <span>👤</span> Профиль
+          <button className="btn" style={s.navItem} onClick={onOpenProfile}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z"/></svg>
+            Профиль
+          </button>
+          <button className="btn" style={s.navItem} onClick={() => { setShowGlobalStats(true); loadGlobalStats(); }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H7v-2h5v2zm5-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+            Статистика
           </button>
         </nav>
 
-        <div style={st.sidebarFooter}>
+        <div style={s.sidebarBottom}>
           <button className="btn btn-danger" onClick={onLogout} style={{ width: "100%", fontSize: 12 }}>
             Выйти
           </button>
         </div>
       </aside>
 
-      {/* ── MAIN ── */}
-      <main style={st.main}>
-        <div style={st.mainHeader}>
+      {/* ── Main ── */}
+      <main style={s.main}>
+        {/* Header */}
+        <div style={s.header}>
           <div>
-            <h1 style={st.heading}>Ваши чаты</h1>
-            <p style={st.subheading}>
-              {chats.length} {chats.length === 1 ? "чат" : chats.length >= 2 && chats.length <= 4 ? "чата" : "чатов"}
-            </p>
+            <h1 style={s.heading}>Чаты</h1>
+            <p style={s.sub}>{chats.length} {chats.length === 1 ? "чат" : chats.length < 5 ? "чата" : "чатов"}</p>
           </div>
-
-          {/* ── RIGHT ACTIONS ── */}
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {/* Global stats button */}
-            <button
-              className="btn"
-              onClick={openGlobalStats}
-              style={{ fontSize: 12, gap: 6 }}
-              title="Статистика по всем задачам"
-            >
-              📊 Статистика
-            </button>
-
-            <button className="btn btn-primary" onClick={() => setShowCreateChat(true)} style={{ gap: 6 }}>
-              <span style={{ fontSize: 16 }}>+</span> Новый чат
-            </button>
-          </div>
+          <button className="btn btn-primary" onClick={() => setShowCreateChat(true)} style={{ gap: 6 }}>
+            <span style={{ fontSize: 16, lineHeight: 1 }}>+</span> Новый чат
+          </button>
         </div>
 
-        {/* Chats list */}
-        <div style={st.chatsList}>
+        {/* Search */}
+        <div style={{ position: "relative" }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Поиск по чатам…"
+            className="input"
+            style={{ paddingLeft: 36 }}
+          />
+          <svg style={{ position: "absolute", left: 11, top: "50%", transform: "translateY(-50%)", opacity: 0.4 }}
+            width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="var(--c-ink)" strokeWidth={2.5}>
+            <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          </svg>
+        </div>
+
+        {/* List */}
+        <div style={s.list}>
           {loading ? (
-            <div style={st.empty}><span className="spinner" /></div>
-          ) : chats.length === 0 ? (
-            <div style={st.empty}>
-              <span style={{ fontSize: 32 }}>💬</span>
-              <span style={{ color: "var(--c-ink-muted)", fontSize: 14 }}>Нет чатов. Создайте первый!</span>
+            <div style={s.empty}><span className="spinner" /></div>
+          ) : filtered.length === 0 ? (
+            <div style={s.empty}>
+              <span style={{ fontSize: 28 }}>💬</span>
+              <span style={{ color: "var(--c-ink-muted)", fontSize: 13 }}>
+                {search ? "Ничего не найдено" : "Нет чатов. Создайте первый!"}
+              </span>
             </div>
           ) : (
-            chats.map((chat) => (
-              <div key={chat.id} onClick={() => onSelectChat(chat)} style={st.chatItem} className="chat-item-row">
-                <div className={`avatar avatar-md ${getAvClass(chat.id)}`}>{getInitials(chat)}</div>
-                <div style={st.chatInfo}>
-                  <div style={st.chatName}>{chat.title || `Чат #${chat.id}`}</div>
-                 <div style={st.chatPreview}>
-                    {renderTyping(chat) || getLastMessagePreview(chat)}
+            filtered.map(chat => {
+              const typing = renderTyping(chat);
+              return (
+                <div key={chat.id} onClick={() => onSelectChat(chat)} style={s.chatRow} className="chat-row">
+                  <div className={`avatar avatar-md ${getAvClass(chat.id)}`}>{getInitials(chat)}</div>
+                  <div style={s.chatInfo}>
+                    <div style={s.chatName}>{chat.title || `Чат #${chat.id}`}</div>
+                    <div style={{ ...s.chatPreview, color: typing ? "var(--c-brand)" : "var(--c-ink-muted)", fontStyle: typing ? "italic" : "normal" }}>
+                      {typing || getLastMessagePreview(chat)}
+                    </div>
+                  </div>
+                  <div style={s.chatRight}>
+                    {chat.cnt_unread_messages > 0 && (
+                      <span style={s.unread}>{chat.cnt_unread_messages > 99 ? "99+" : chat.cnt_unread_messages}</span>
+                    )}
+                    {chat.chat_type && (
+                      <span style={s.typePill}>{chat.chat_type.toUpperCase()}</span>
+                    )}
                   </div>
                 </div>
-                <div style={st.chatRight}>
-                  {chat.cnt_unread_messages > 0 && (
-                    <span style={st.badge}>
-                      {chat.cnt_unread_messages > 99 ? "99+" : chat.cnt_unread_messages}
-                    </span>
-                  )}
-                  {chat.chat_type && (
-                    <span className="pill" style={{ fontSize: 9, background: "var(--c-surface)", color: "var(--c-ink-muted)", border: "1px solid var(--c-line)" }}>
-                      {chat.chat_type.toUpperCase()}
-                    </span>
-                  )}
-                </div>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </main>
 
-      {/* ══ GLOBAL STATS MODAL ═══════════════════════════════════════════════ */}
+      {/* ── Global stats modal ── */}
       {showGlobalStats && (
         <div className="modal-backdrop">
-          <div className="modal" style={{
-            maxWidth: 720, maxHeight: "92vh",
-            overflow: "hidden", display: "flex", flexDirection: "column",
-          }}>
+          <div className="modal" style={{ maxWidth: 720, maxHeight: "92vh", overflow: "hidden", display: "flex", flexDirection: "column" }}>
             <div className="modal-header" style={{ flexShrink: 0 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <span className="modal-title">📊 Статистика задач — все чаты</span>
-                <button
-                  className="btn"
-                  style={{ fontSize: 11, padding: "4px 10px" }}
-                  onClick={refreshGlobalStats}
-                  disabled={loadingGlobalStats}
-                  title="Обновить"
-                >
-                  {loadingGlobalStats ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : "↺ Обновить"}
+                <span className="modal-title">📊 Статистика — все чаты</span>
+                <button className="btn" style={{ fontSize: 11, padding: "4px 10px" }}
+                  onClick={refreshGlobalStats} disabled={loadingGlobalStats}>
+                  {loadingGlobalStats ? <span className="spinner" style={{ width: 12, height: 12, borderWidth: 2 }} /> : "↺"}
                 </button>
               </div>
               <button className="modal-close" onClick={() => setShowGlobalStats(false)}>✕</button>
             </div>
-
             <div style={{ overflowY: "auto", flex: 1, padding: "4px 0 8px" }}>
-              <TaskStatsPanel
-                stats={globalStats}
-                loading={loadingGlobalStats}
-                // no getName — user_id labels only (no member list in this context)
-              />
+              <TaskStatsPanel stats={globalStats} loading={loadingGlobalStats} />
             </div>
           </div>
         </div>
       )}
 
-      {/* ── CREATE CHAT MODAL ── */}
+      {/* ── Create chat modal ── */}
       {showCreateChat && (
         <div className="modal-backdrop">
           <div className="modal" style={{ maxWidth: 420 }}>
             <div className="modal-header">
-              <span className="modal-title">Создать новый чат</span>
+              <span className="modal-title">Новый чат</span>
               <button className="modal-close" onClick={() => setShowCreateChat(false)}>✕</button>
             </div>
             <CreateChatScreen onChatCreated={handleChatCreated} />
@@ -367,38 +288,55 @@ const handleTypingEvent = (wsMsg: any) => {
       )}
 
       <style>{`
-        .chat-item-row {
+        .chat-row {
           display: flex; align-items: center; gap: 12px;
-          padding: 12px 16px; cursor: pointer; border-radius: var(--r-lg);
+          padding: 11px 16px; cursor: pointer;
+          border-bottom: 1px solid var(--c-line-soft);
           transition: background var(--t-fast);
         }
-        .chat-item-row:hover { background: var(--c-accent-bg); }
+        .chat-row:last-child { border-bottom: none; }
+        .chat-row:hover { background: var(--c-brand-bg); }
       `}</style>
     </div>
   );
 }
 
-const st: Record<string, React.CSSProperties> = {
-  page:          { minHeight: "100vh", display: "flex", background: "var(--c-surface)" },
-  sidebar:       { width: 220, background: "var(--c-ink)", display: "flex", flexDirection: "column", padding: "20px 16px", gap: 8, position: "sticky", top: 0, height: "100vh" },
-  sidebarHeader: { display: "flex", alignItems: "center", gap: 8, color: "#fff", padding: "4px 0 16px", borderBottom: "1px solid rgba(255,255,255,0.1)" },
-  brandMark:     { fontSize: 18, color: "#93c5fd" },
-  brandName:     { fontSize: 14, fontWeight: 600, fontFamily: "var(--font-mono)", letterSpacing: "0.04em" },
-  nav:           { display: "flex", flexDirection: "column", gap: 4, flex: 1, paddingTop: 12 },
-  navItemActive: { justifyContent: "flex-start", gap: 8, fontSize: 13, background: "rgba(255,255,255,0.12)", color: "#fff", border: "1px solid rgba(255,255,255,0.15)", width: "100%" },
-  navItem:       { justifyContent: "flex-start", gap: 8, fontSize: 13, background: "transparent", color: "rgba(255,255,255,0.6)", border: "1px solid transparent", width: "100%" },
-  sidebarBadge:  { marginLeft: "auto", background: "var(--c-accent)", color: "#fff", borderRadius: "var(--r-full)", fontSize: 9, fontWeight: 700, padding: "1px 6px", fontFamily: "var(--font-mono)" },
-  sidebarFooter: { paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.1)" },
-  main:          { flex: 1, display: "flex", flexDirection: "column", maxWidth: 680, width: "100%", margin: "0 auto", padding: "28px 24px", gap: 20 },
-  mainHeader:    { display: "flex", alignItems: "flex-start", justifyContent: "space-between" },
-  heading:       { fontSize: 22, fontWeight: 600, color: "var(--c-ink)" },
-  subheading:    { fontSize: 12, color: "var(--c-ink-muted)", marginTop: 2 },
-  chatsList:     { background: "var(--c-paper)", border: "1px solid var(--c-line)", borderRadius: "var(--r-xl)", overflow: "hidden", minHeight: 80 },
-  empty:         { display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 12, padding: "48px 0" },
-  chatInfo:      { flex: 1, minWidth: 0 },
-  chatName:      { fontSize: 14, fontWeight: 500, color: "var(--c-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  chatPreview:   { fontSize: 12, color: "var(--c-ink-muted)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
-  chatRight:     { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 },
-  badge:         { background: "var(--c-accent)", color: "#fff", borderRadius: "var(--r-full)", fontSize: 10, fontWeight: 600, padding: "1px 7px", fontFamily: "var(--font-mono)", minWidth: 20, textAlign: "center" },
-  chatItem:      {},
+const s: Record<string, React.CSSProperties> = {
+  page:        { minHeight: "100vh", display: "flex", background: "var(--c-surface)" },
+  sidebar:     { width: 210, background: "var(--c-brand)", display: "flex", flexDirection: "column",
+                 padding: "16px 12px", gap: 6, position: "sticky", top: 0, height: "100vh", flexShrink: 0 },
+  sidebarTop:  { padding: "4px 4px 16px", borderBottom: "1px solid rgba(255,255,255,0.12)", marginBottom: 8 },
+  nav:         { display: "flex", flexDirection: "column", gap: 3, flex: 1 },
+  navActive:   { justifyContent: "flex-start", gap: 8, fontSize: 13,
+                 background: "rgba(255,255,255,0.15)", color: "#fff",
+                 border: "1px solid rgba(255,255,255,0.18)", width: "100%" },
+  navItem:     { justifyContent: "flex-start", gap: 8, fontSize: 13,
+                 background: "transparent", color: "rgba(255,255,255,0.65)",
+                 border: "1px solid transparent", width: "100%" },
+  badge:       { marginLeft: "auto", background: "var(--c-green)", color: "#fff",
+                 borderRadius: "var(--r-full)", fontSize: 9, fontWeight: 700,
+                 padding: "1px 6px", fontFamily: "var(--font-mono)" },
+  sidebarBottom: { paddingTop: 12, borderTop: "1px solid rgba(255,255,255,0.12)" },
+
+  main:        { flex: 1, display: "flex", flexDirection: "column", maxWidth: 680,
+                 width: "100%", margin: "0 auto", padding: "24px 20px", gap: 16 },
+  header:      { display: "flex", alignItems: "center", justifyContent: "space-between" },
+  heading:     { fontSize: 20, fontWeight: 800, color: "var(--c-ink)" },
+  sub:         { fontSize: 12, color: "var(--c-ink-muted)", marginTop: 2 },
+
+  list:        { background: "var(--c-paper)", border: "1px solid var(--c-line)",
+                 borderRadius: "var(--r-lg)", overflow: "hidden", minHeight: 80 },
+  empty:       { display: "flex", flexDirection: "column", alignItems: "center",
+                 justifyContent: "center", gap: 12, padding: "48px 0" },
+
+  chatRow:     {},
+  chatInfo:    { flex: 1, minWidth: 0 },
+  chatName:    { fontSize: 14, fontWeight: 600, color: "var(--c-ink)",
+                 whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  chatPreview: { fontSize: 12, marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  chatRight:   { display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 },
+  unread:      { background: "var(--c-brand)", color: "#fff", borderRadius: "var(--r-full)",
+                 fontSize: 10, fontWeight: 700, padding: "1px 7px",
+                 fontFamily: "var(--font-mono)", minWidth: 20, textAlign: "center" as const },
+  typePill:    { fontSize: 9, color: "var(--c-ink-ghost)", fontFamily: "var(--font-mono)", fontWeight: 600 },
 };
