@@ -61,4 +61,5 @@ class ChatSchemaFromBd(BaseModel):
 class ChatSchemaFromBdWithLastMessage(ChatSchemaFromBd):
     last_message: MessageFromDbSchema | None = None
     last_read_message_id : int
+    max_other_read_id: int
     cnt_unread_messages: int

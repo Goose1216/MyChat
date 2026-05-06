@@ -147,11 +147,13 @@ class ChatService:
                 last_message = await uow.message.get_last_for_chat(chat.id)
                 chat_participant = await uow.chat_participant.get_one_by(chat_id=chat.id, user_id=user_id)
                 last_read_message_id = chat_participant.last_read_message_id
+                max_other_read_id = await uow.chat_participant.get_max_other_read_id(chat_id=chat.id)
 
                 chat = ChatSchemaFromBd.model_validate(chat)
                 chat = chat.model_dump()
                 chat['last_message'] = last_message
                 chat['last_read_message_id'] = last_read_message_id
+                chat['max_other_read_id'] = max_other_read_id
                 cnt_unread_messages = await uow.message.get_unread_count(
                             last_read_message_id=chat_participant.last_read_message_id,
                             user_id=chat_participant.user_id,

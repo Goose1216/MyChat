@@ -15,6 +15,39 @@ const formatTime  = (iso: string) =>
 const STATUS_OPTIONS   = ["NEW", "IN_PROGRESS", "DONE", "CANCELLED"];
 const PRIORITY_OPTIONS = ["LOW", "MEDIUM", "HIGH"];
 
+// ─── Ограничения на файлы (должны совпадать с backend/files.py) ───────────────
+const MAX_FILE_MB   = 20;
+const MAX_FILE_BYTES = MAX_FILE_MB * 1024 * 1024;
+
+// Расширения, которые точно запрещены на сервере
+const BLOCKED_EXTENSIONS = new Set([
+  ".exe", ".bat", ".cmd", ".sh", ".ps1", ".msi", ".com",
+  ".vbs", ".js", ".ts", ".py", ".php", ".rb", ".pl",
+  ".jar", ".dll", ".so", ".dylib", ".app",
+]);
+
+// Человекочитаемые категории разрешённых файлов (для подсказки пользователю)
+const ALLOWED_HINT = "Изображения, PDF, Word, Excel, PowerPoint, текст, CSV, архивы (ZIP/RAR/7z), аудио MP3/OGG, видео MP4/WebM";
+
+/**
+ * Клиентская проверка файла перед отправкой.
+ * Возвращает строку с ошибкой или null если всё ок.
+ */
+function validateFile(file: File): string | null {
+  // 1. Проверка расширения
+  const dotIdx = file.name.lastIndexOf(".");
+  const ext    = dotIdx >= 0 ? file.name.slice(dotIdx).toLowerCase() : "";
+  if (BLOCKED_EXTENSIONS.has(ext)) {
+    return `Файлы с расширением «${ext}» запрещены к отправке.`;
+  }
+  // 2. Проверка размера
+  if (file.size > MAX_FILE_BYTES) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    return `Файл слишком большой: ${sizeMb} МБ. Максимум — ${MAX_FILE_MB} МБ.`;
+  }
+  return null;
+}
+
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = { NEW: "pill-new", IN_PROGRESS: "pill-prog", DONE: "pill-done", CANCELLED: "pill-cancel" };
   return <span className={`pill ${map[status] || "pill-cancel"}`}>{status}</span>;
@@ -28,6 +61,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const [typingUsers, setTypingUsers] = useState<TypingMap>({});
   const typingIds = Object.keys(typingUsers).map(Number);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileError, setFileError]       = useState<string | null>(null);
   const messageRefs        = useRef<Record<number, HTMLDivElement | null>>({});
   const initialScrollDoneRef = useRef(false);
   const scrollOnSendRef    = useRef(false);
@@ -41,7 +75,9 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const lastTypingRef       = useRef<number>(0);
   const lastSentReadRef     = useRef<number>(0);
   const lastReadMessageIdRef = useRef<number>(0);
-  const [someoneReadUpTo, setSomeoneReadUpTo] = useState<number>(0);
+  // chat.max_other_read_id приходит в объекте чата из GET /chats —
+  // инициализируем сразу, чтобы ✔✔ не мигали при открытии
+  const [someoneReadUpTo, setSomeoneReadUpTo] = useState<number>(chat.max_other_read_id ?? 0);
 
   const [profileUser, setProfileUser]   = useState<any | null>(null);
   const [addUserOpen, setAddUserOpen]   = useState(false);
@@ -70,7 +106,12 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const { sendMessage, addHandler, removeHandler, connected } = useWebSocket();
   const API = apiBase();
 
-  useEffect(() => { setStats([]); setShowStats(false); }, [chat.id]);
+  useEffect(() => {
+    setStats([]);
+    setShowStats(false);
+    // При переключении на другой чат берём актуальное значение из объекта чата
+    setSomeoneReadUpTo(chat.max_other_read_id ?? 0);
+  }, [chat.id]);
 
   useEffect(() => {
     (async () => {
@@ -245,12 +286,30 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
   const sendFile = async () => {
     if (!selectedFile) return;
+
+    // Клиентская валидация (быстрая проверка до сетевого запроса)
+    const clientError = validateFile(selectedFile);
+    if (clientError) {
+      setFileError(clientError);
+      return;
+    }
+
     const form = new FormData();
     form.append("file", selectedFile);
     try {
-      await fetchWithAuth(`${API}/messages/${chat.id}/file/`, { method: "POST", body: form });
+      const res = await fetchWithAuth(`${API}/messages/${chat.id}/file/`, { method: "POST", body: form });
+      if (!res.ok) {
+        // Парсим серверную ошибку (400 / 413 / 415)
+        const data = await res.json().catch(() => ({}));
+        const msg  = data?.detail || data?.description || data?.errors?.[0]?.message || "Не удалось отправить файл";
+        setFileError(msg);
+        return;
+      }
       setSelectedFile(null);
-    } catch { alert("Не удалось отправить файл"); }
+      setFileError(null);
+    } catch {
+      setFileError("Ошибка соединения. Попробуйте ещё раз.");
+    }
   };
 
   const sendTyping = () => {
@@ -469,16 +528,87 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
       {/* FOOTER */}
       <footer style={s.footer}>
+        {/* Typing indicator */}
         {typingIds.length > 0 && (
           <div style={s.typing}>
             <span style={s.typingDots}>···</span>
             {typingIds.map(id => { const u = members.find(x => x.id === id); return u ? safeName(u) : "Кто-то"; }).join(", ")} печатает
           </div>
         )}
-        <form onSubmit={e => { e.preventDefault(); selectedFile ? sendFile() : send(e); }} style={s.inputRow}>
-          <input type="file" id="file-input" style={{ display: "none" }}
-            onChange={e => { const f = e.target.files?.[0]; if (f) setSelectedFile(f); }} />
-          <label htmlFor="file-input" style={s.attachBtn} title="Прикрепить файл">📎</label>
+
+        {/* Ошибка файла — тост над строкой ввода */}
+        {fileError && (
+          <div style={s.fileErrorBanner}>
+            <span style={{ flex: 1 }}>⚠️ {fileError}</span>
+            <button
+              style={s.fileErrorClose}
+              onClick={() => { setFileError(null); setSelectedFile(null); }}
+              title="Закрыть"
+            >✕</button>
+          </div>
+        )}
+
+        {/* Превью выбранного файла */}
+        {selectedFile && !fileError && (
+          <div style={s.filePreview}>
+            <span style={s.filePreviewIcon}>📎</span>
+            <div style={s.filePreviewInfo}>
+              <span style={s.filePreviewName}>{selectedFile.name}</span>
+              <span style={s.filePreviewSize}>{(selectedFile.size / (1024 * 1024)).toFixed(2)} МБ из {MAX_FILE_MB} МБ макс.</span>
+            </div>
+            <button className="btn btn-danger" style={{ fontSize: 11, padding: "4px 8px", flexShrink: 0 }}
+              onClick={() => { setSelectedFile(null); setFileError(null); }}>✕</button>
+          </div>
+        )}
+
+        <form
+          onSubmit={e => { e.preventDefault(); selectedFile ? sendFile() : send(e); }}
+          style={s.inputRow}
+        >
+          <input
+            type="file"
+            id="file-input"
+            style={{ display: "none" }}
+            // accept подсказывает браузеру какие файлы показывать в диалоге
+            accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.7z,.mp3,.ogg,.mp4,.webm"
+            onChange={e => {
+              const f = e.target.files?.[0];
+              // Сбрасываем input чтобы можно было выбрать тот же файл повторно
+              e.target.value = "";
+              if (!f) return;
+              const err = validateFile(f);
+              if (err) {
+                setFileError(err);
+                setSelectedFile(null);
+              } else {
+                setFileError(null);
+                setSelectedFile(f);
+              }
+            }}
+          />
+
+          {/* Кнопка прикрепления с тултипом об ограничениях */}
+          <div style={{ position: "relative" }} className="attach-wrap">
+            <label
+              htmlFor="file-input"
+              style={{
+                ...s.attachBtn,
+                background: selectedFile ? "var(--c-brand-bg)" : "var(--c-surface)",
+                borderColor: selectedFile ? "var(--c-brand-border)" : "var(--c-line)",
+              }}
+            >
+              📎
+            </label>
+            {/* Тултип — показывается при наведении через CSS */}
+            <div style={s.attachTooltip}>
+              <div style={{ fontWeight: 700, marginBottom: 4 }}>Допустимые файлы</div>
+              <div style={{ marginBottom: 6, lineHeight: 1.4 }}>{ALLOWED_HINT}</div>
+              <div style={{ color: "var(--c-warning)", fontWeight: 700 }}>
+                ⚠ Максимальный размер: {MAX_FILE_MB} МБ
+              </div>
+            </div>
+          </div>
+
           <input
             value={newMessage}
             onChange={e => { setNewMessage(e.target.value); sendTyping(); }}
@@ -487,11 +617,11 @@ export default function ChatScreen({ userId, chat, onBack }) {
             className="input"
             style={{ flex: 1, borderRadius: "var(--r-full)", height: 40, background: "var(--c-surface)" }}
           />
-          {selectedFile && (
-            <button type="button" className="btn btn-danger" style={{ fontSize: 11, padding: "5px 10px" }} onClick={() => setSelectedFile(null)}>✕</button>
-          )}
+
           <button type="submit" className="btn btn-primary"
-            style={{ width: 40, height: 40, borderRadius: "var(--r-full)", padding: 0, fontSize: 16, flexShrink: 0 }}>➤</button>
+            style={{ width: 40, height: 40, borderRadius: "var(--r-full)", padding: 0, fontSize: 16, flexShrink: 0 }}>
+            ➤
+          </button>
         </form>
       </footer>
 
@@ -699,6 +829,15 @@ export default function ChatScreen({ userId, chat, onBack }) {
         }
         .msg-action-btn:hover { background: var(--c-surface); }
         .msg-action-delete:hover { background: var(--c-danger-bg) !important; }
+
+        /* Тултип у кнопки прикрепления файла */
+        .attach-wrap { position: relative; }
+        .attach-wrap:hover > div[style] { display: block !important; }
+
+        @keyframes fadeInDown {
+          from { opacity: 0; transform: translateY(-6px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
       `}</style>
     </div>
   );
@@ -737,5 +876,39 @@ const s: Record<string, React.CSSProperties> = {
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 16, cursor: "pointer", background: "var(--c-surface)", flexShrink: 0,
     transition: "background var(--t-fast)",
+  },
+
+  // Тост с ошибкой файла
+  fileErrorBanner: {
+    display: "flex", alignItems: "center", gap: 8,
+    background: "var(--c-danger-bg)", border: "1px solid #FFCDD2",
+    borderRadius: "var(--r-md)", padding: "8px 12px", marginBottom: 8,
+    fontSize: 12, fontWeight: 600, color: "var(--c-danger)",
+    animation: "fadeInDown 0.2s ease",
+  },
+  fileErrorClose: {
+    background: "transparent", border: "none", cursor: "pointer",
+    color: "var(--c-danger)", fontSize: 13, padding: "0 2px", flexShrink: 0,
+  },
+
+  // Превью выбранного файла
+  filePreview: {
+    display: "flex", alignItems: "center", gap: 10,
+    background: "var(--c-brand-bg)", border: "1px solid var(--c-brand-border)",
+    borderRadius: "var(--r-md)", padding: "7px 12px", marginBottom: 8,
+  },
+  filePreviewIcon: { fontSize: 18, flexShrink: 0 },
+  filePreviewInfo: { flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: 1 },
+  filePreviewName: { fontSize: 12, fontWeight: 700, color: "var(--c-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" },
+  filePreviewSize: { fontSize: 11, color: "var(--c-ink-muted)" },
+
+  // Тултип над кнопкой прикрепления
+  attachTooltip: {
+    display: "none", // показывается через CSS .attach-wrap:hover
+    position: "absolute", bottom: "calc(100% + 8px)", left: 0,
+    width: 260, background: "var(--c-ink)", color: "#fff",
+    borderRadius: "var(--r-md)", padding: "10px 12px", fontSize: 11,
+    boxShadow: "var(--shadow-md)", zIndex: 20, pointerEvents: "none",
+    lineHeight: 1.5,
   },
 };

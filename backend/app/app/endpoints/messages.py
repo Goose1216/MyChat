@@ -11,6 +11,7 @@ from app.utils import manager, get_unit_of_work
 from app.exceptions import NotAuthenticated, EntityError, UnfoundEntity, InaccessibleEntity
 from app.utils.file import get_file_service
 from app.services.file import FileService
+from app.app.endpoints.files import validate_upload
 
 logger = logging.getLogger(__name__)
 
@@ -121,6 +122,8 @@ async def upload_file(
         uow: IUnitOfWork = Depends(get_unit_of_work),
         access_token=Depends(security.decode_jwt_access),
 ):
+    validate_upload(file)
+
     user_id = access_token.get("user_id")
     chat_service = ChatService(uow)
     message_service = MessageService(uow)

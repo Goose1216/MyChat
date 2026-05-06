@@ -20,88 +20,114 @@ export const useWebSocket = () => {
 
 export const WebSocketProvider = ({ children }: { children: React.ReactNode }) => {
   const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-  const [connected, setConnected] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
-  const handlersRef = useRef<Set<WsMessageHandler>>(new Set());
+  const WS_BASE = API.replace(/^http/, "ws");
 
-  const getToken = () => localStorage.getItem("access_token");
-  const wsUrl = API.replace(/^http/, "ws") + `/chats/ws?token=${getToken()}`;
+  const [connected, setConnected]         = useState(false);
+  const socketRef                         = useRef<WebSocket | null>(null);
+  const handlersRef                       = useRef<Set<WsMessageHandler>>(new Set());
+  const stopRef                           = useRef(false);
+  const reconnectTimerRef                 = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  useEffect(() => {
-    let stop = false;
-    let reconnectTimer: any;
+  // Каждый раз берём токен из localStorage — не кэшируем в переменной
+  const getWsUrl = () => {
+    const token = localStorage.getItem("access_token") ?? "";
+    return `${WS_BASE}/chats/ws?token=${token}`;
+  };
 
-    const connect = () => {
-      const ws = new WebSocket(wsUrl);
-      socketRef.current = ws;
+  const connect = () => {
+    if (stopRef.current) return;
 
-      ws.onopen = () => {
-        console.log("✅ WS подключён");
-        setConnected(true);
-      };
+    // Закрываем старое соединение если есть
+    if (socketRef.current) {
+      socketRef.current.onclose = null; // отключаем авто-реконнект для старого
+      socketRef.current.close();
+    }
 
-      ws.onclose = () => {
-        console.warn("⚠️ WS закрыт, переподключение...");
-        setConnected(false);
-        if (!stop) reconnectTimer = setTimeout(connect, 3000);
-      };
+    const ws = new WebSocket(getWsUrl());
+    socketRef.current = ws;
 
-      ws.onerror = (err) => console.error("Ошибка WS:", err);
-
-      ws.onmessage = (e) => {
-        try {
-          const data = JSON.parse(e.data);
-          handlersRef.current.forEach((h) => h(data));
-        } catch (err) {
-          console.error("Ошибка парсинга WS:", err);
-        }
-      };
+    ws.onopen = () => {
+      console.log("[ws] подключён");
+      setConnected(true);
     };
 
+    ws.onclose = (e) => {
+      console.warn("[ws] соединение закрыто", e.code, e.reason);
+      setConnected(false);
+
+      // Код 1008 = Policy Violation = токен невалиден.
+      // Не переподключаемся автоматически — будем ждать tokenRefreshed.
+      if (e.code === 1008) {
+        console.warn("[ws] токен отклонён сервером, жду обновления токена...");
+        return;
+      }
+
+      if (!stopRef.current) {
+        reconnectTimerRef.current = setTimeout(connect, 3000);
+      }
+    };
+
+    ws.onerror = (err) => console.error("[ws] ошибка:", err);
+
+    ws.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        handlersRef.current.forEach((h) => h(data));
+      } catch (err) {
+        console.error("[ws] ошибка парсинга:", err);
+      }
+    };
+  };
+
+  useEffect(() => {
+    stopRef.current = false;
     connect();
 
-    // при обновлении токена — переподключаем
+    // Событие от api.ts: токен успешно обновлён — переподключаемся с новым
+    const onTokenRefreshed = () => {
+      console.log("[ws] токен обновлён, переподключаюсь...");
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
+      connect();
+    };
+    window.addEventListener("tokenRefreshed", onTokenRefreshed);
+
+    // StorageEvent — для переподключения при смене токена в другой вкладке
     const onStorage = (e: StorageEvent) => {
-      if (e.key === "access_token") {
-        console.log("♻️ Токен обновился, переподключаем WS...");
-        socketRef.current?.close();
+      if (e.key === "access_token" && e.newValue) {
+        console.log("[ws] токен обновлён в другой вкладке, переподключаюсь...");
+        connect();
       }
     };
     window.addEventListener("storage", onStorage);
 
     return () => {
-      stop = true;
+      stopRef.current = true;
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       socketRef.current?.close();
-      clearTimeout(reconnectTimer);
+      window.removeEventListener("tokenRefreshed", onTokenRefreshed);
       window.removeEventListener("storage", onStorage);
     };
-  }, [wsUrl]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  // Пустой массив зависимостей — правильно: connect() читает токен через getWsUrl()
+  // который обращается к localStorage в момент вызова, а не при монтировании.
 
   const sendMessage = (msg: any) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify(msg));
     } else {
-      console.warn("❌ WS не подключён, сообщение не отправлено");
+      console.warn("[ws] не подключён, сообщение не отправлено");
     }
   };
 
-  const addHandler = (handler: WsMessageHandler) => {
-    handlersRef.current.add(handler);
-  };
-
-  const removeHandler = (handler: WsMessageHandler) => {
-    handlersRef.current.delete(handler);
-  };
+  const addHandler    = (h: WsMessageHandler) => handlersRef.current.add(h);
+  const removeHandler = (h: WsMessageHandler) => handlersRef.current.delete(h);
 
   return (
     <WebSocketContext.Provider
-      value={{
-        socket: socketRef.current,
-        sendMessage,
-        addHandler,
-        removeHandler,
-        connected,
-      }}
+      value={{ socket: socketRef.current, sendMessage, addHandler, removeHandler, connected }}
     >
       {children}
     </WebSocketContext.Provider>

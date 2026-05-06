@@ -6,44 +6,58 @@ import ChatScreen from "./components/ChatScreen";
 import ProfileScreen from "./components/ProfileScreen";
 import type { Chat } from "./types";
 import { WebSocketProvider } from "./Websocket.tsx";
+import { setSessionExpiredCallback } from "./api";
+
+type View = "login" | "register" | "chats" | "chat" | "profile";
 
 export default function App() {
   const [token, setToken] = useState<string | null>(
-    localStorage.getItem("access_token")
+    () => localStorage.getItem("access_token")
   );
   const [userId, setUserId] = useState<number | null>(() => {
     const u = localStorage.getItem("user_id");
-    return u ? parseInt(u) : null;
+    return u ? parseInt(u, 10) : null;
   });
 
-  const [view, setView] = useState<
-    "login" | "register" | "chats" | "chat" | "profile"
-  >(token ? "chats" : "login");
-
+  const [view, setView]                 = useState<View>(token ? "chats" : "login");
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
 
-  const openChat = (chat: Chat) => {
-    setSelectedChat(chat);
-    setView("chat");
+  // Регистрируем коллбэк один раз при монтировании.
+  // api.ts вызовет его когда refresh-токен протухнет.
+  // Никакого window.location.reload() — просто переключаем состояние.
+  useEffect(() => {
+    setSessionExpiredCallback(() => {
+      setToken(null);
+      setUserId(null);
+      setSelectedChat(null);
+      setView("login");
+    });
+  }, []);
+
+  const handleLogin = (accessToken: string, id: number, refreshToken: string) => {
+    localStorage.setItem("access_token", accessToken);
+    localStorage.setItem("refresh_token", refreshToken);
+    localStorage.setItem("user_id", String(id));
+    setToken(accessToken);
+    setUserId(id);
+    setView("chats");
   };
 
-  const backToChats = () => {
+  const handleLogout = () => {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+    localStorage.removeItem("user_id");
+    setToken(null);
+    setUserId(null);
     setSelectedChat(null);
-    setView("chats");
+    setView("login");
   };
 
   return (
     <WebSocketProvider>
       {view === "login" && (
         <LoginScreen
-          onLogin={(accessToken, id, refreshToken) => {
-            setToken(accessToken);
-            setUserId(id);
-            localStorage.setItem("access_token", accessToken);
-            localStorage.setItem("user_id", String(id));
-            if (refreshToken) localStorage.setItem("refresh_token", refreshToken);
-            setView("chats");
-          }}
+          onLogin={handleLogin}
           onGoRegister={() => setView("register")}
         />
       )}
@@ -59,13 +73,8 @@ export default function App() {
         <ChatsListScreen
           access_token={token}
           userId={userId}
-          onSelectChat={openChat}
-          onLogout={() => {
-            setToken(null);
-            setUserId(null);
-            localStorage.clear();
-            setView("login");
-          }}
+          onSelectChat={(chat: Chat) => { setSelectedChat(chat); setView("chat"); }}
+          onLogout={handleLogout}
           onOpenProfile={() => setView("profile")}
         />
       )}
@@ -74,7 +83,7 @@ export default function App() {
         <ChatScreen
           userId={userId}
           chat={selectedChat}
-          onBack={backToChats}
+          onBack={() => { setSelectedChat(null); setView("chats"); }}
         />
       )}
 
@@ -83,12 +92,7 @@ export default function App() {
           token={token}
           userId={userId}
           onBack={() => setView("chats")}
-          onLogout={() => {
-            setToken(null);
-            setUserId(null);
-            localStorage.clear();
-            setView("login");
-          }}
+          onLogout={handleLogout}
         />
       )}
     </WebSocketProvider>
