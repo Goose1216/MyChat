@@ -42,6 +42,7 @@ class UnitOfWork(IUnitOfWork):
         self.file = repo.FileRepository(self.session)
         self.task = repo.TaskRepository(self.session)
         self.task_assignment = repo.TaskAssignmentRepository(self.session)
+        self.message_read_batch = repo.MessageReadBatchRepository(self.session)
         return self
 
     async def __aexit__(self, *args):

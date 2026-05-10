@@ -60,6 +60,20 @@ class ChatSchemaFromBd(BaseModel):
 
 class ChatSchemaFromBdWithLastMessage(ChatSchemaFromBd):
     last_message: MessageFromDbSchema | None = None
-    last_read_message_id : int
+    last_read_message_id: int
     max_other_read_id: int
     cnt_unread_messages: int
+
+
+class ReadBatchCreateSchema(BaseModel):
+    chat_id: int
+    from_id: int
+    to_id:   int
+
+
+class MessageReaderSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id:  int
+    username: str | None = None
+    email:    str | None = None
+    read_at:  datetime | None = None

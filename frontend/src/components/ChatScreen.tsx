@@ -72,14 +72,48 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const [loadingStats, setLoadingStats] = useState(false);
   const [showStats, setShowStats]   = useState(false);
 
+  // Нормализуем объект чата ПЕРВЫМ — до всех ref-ов которые его используют
+  const safeChat = {
+    ...chat,
+    max_other_read_id:    chat.max_other_read_id    ?? 0,
+    cnt_unread_messages:  chat.cnt_unread_messages   ?? 0,
+    last_read_message_id: chat.last_read_message_id  ?? 0,
+  };
+
   const lastTypingRef       = useRef<number>(0);
   const lastSentReadRef     = useRef<number>(0);
-  const lastReadMessageIdRef = useRef<number>(0);
-  // chat.max_other_read_id приходит в объекте чата из GET /chats —
-  // инициализируем сразу, чтобы ✔✔ не мигали при открытии
-  const [someoneReadUpTo, setSomeoneReadUpTo] = useState<number>(chat.max_other_read_id ?? 0);
+  // Оба ref-а инициализируем одним значением — last_read_message_id из чата.
+  // Это гарантирует: если пользователь ничего нового не прочитал,
+  // условие (currentReadId > batchFromIdRef) будет false и запрос не уйдёт.
+  const lastReadMessageIdRef  = useRef<number>(safeChat.last_read_message_id || 0);
+  // Батчинг прочтений: храним from_id последнего отправленного батча
+  const batchFromIdRef        = useRef<number>(safeChat.last_read_message_id || 0);
+  // Интервал отправки батча на сервер (3 минуты)
+  const BATCH_INTERVAL_MS     = 3 * 60 * 1000;
+  // Ref на функцию отправки батча — чтобы setInterval всегда вызывал актуальную версию
+  // (избегаем проблемы замыкания где интервал захватывает undefined из TDZ)
+  const sendReadBatchRef      = useRef<(toId: number) => void>(() => {});
+
+  const [someoneReadUpTo, setSomeoneReadUpTo] = useState<number>(safeChat.max_other_read_id);
+
+  // Кнопка "вниз": показывается когда пользователь не в самом низу
+  const [isAtBottom, setIsAtBottom]     = useState(true);
+  const [unreadCount, setUnreadCount]   = useState<number>(safeChat.cnt_unread_messages);
 
   const [profileUser, setProfileUser]   = useState<any | null>(null);
+
+  // Контекстное меню (ПКМ на сообщении)
+  const [ctxMenu, setCtxMenu] = useState<{
+    x: number; y: number; messageId: number; isSelf: boolean; senderId: number; isDeleted: boolean;
+  } | null>(null);
+
+  // Список читателей сообщения
+  const [readersModal, setReadersModal] = useState<{
+    messageId: number;
+    senderId: number | null;  // автор сообщения — не показываем в списке
+    readers: Array<{ user_id: number; username: string | null; email: string | null; read_at: string | null }>;
+    loading: boolean;
+  } | null>(null);
   const [addUserOpen, setAddUserOpen]   = useState(false);
   const [allUsers, setAllUsers]         = useState<any[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<string>("");
@@ -109,9 +143,28 @@ export default function ChatScreen({ userId, chat, onBack }) {
   useEffect(() => {
     setStats([]);
     setShowStats(false);
-    // При переключении на другой чат берём актуальное значение из объекта чата
-    setSomeoneReadUpTo(chat.max_other_read_id ?? 0);
+    setSomeoneReadUpTo(safeChat.max_other_read_id);
+    setUnreadCount(safeChat.cnt_unread_messages);
+    setIsAtBottom(true);
   }, [chat.id]);
+
+  const scrollToBottom = () => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    setUnreadCount(0);
+    setIsAtBottom(true);
+
+    // Принудительно отмечаем все видимые сообщения прочитанными —
+    // иначе onScroll может не сработать сразу из-за throttle 300ms
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.sender_id !== userId) {
+      const id = lastMsg.id;
+      if (id > lastReadMessageIdRef.current) {
+        lastReadMessageIdRef.current = id;
+        lastSentReadRef.current = Date.now();
+        fetchWithAuth(`${API}/messages/read/${id}/`, { method: "POST" }).catch(() => {});
+      }
+    }
+  };
 
   useEffect(() => {
     (async () => {
@@ -140,6 +193,13 @@ export default function ChatScreen({ userId, chat, onBack }) {
           is_deleted: msg.is_deleted, sender: msg.sender,
           is_self: msg.sender_id === userId, is_system: msg.sender === null, edited: false,
         }]);
+        // Увеличиваем счётчик непрочитанных если пользователь не внизу
+        if (msg.sender_id !== userId) {
+          setIsAtBottom(prev => {
+            if (!prev) setUnreadCount(c => c + 1);
+            return prev;
+          });
+        }
       }
       if (msg.type_of_message === 1) {
         setMessages(p => p.map(m => m.id === msg.message_id
@@ -253,11 +313,12 @@ export default function ChatScreen({ userId, chat, onBack }) {
     await fetchWithAuth(`${API}/messages/${id}/`, { method: "DELETE" });
   };
 
-  useEffect(() => { lastReadMessageIdRef.current = chat.last_read_message_id || 0; }, [chat.id]);
+  useEffect(() => { lastReadMessageIdRef.current = safeChat.last_read_message_id || 0; }, [chat.id]);
 
   useEffect(() => {
     const el = messagesRef.current;
     if (!el) return;
+
     const sendRead = (id: number) => {
       if (Date.now() - lastSentReadRef.current < 300) return;
       lastSentReadRef.current = Date.now();
@@ -265,8 +326,17 @@ export default function ChatScreen({ userId, chat, onBack }) {
       lastReadMessageIdRef.current = id;
       fetchWithAuth(`${API}/messages/read/${id}/`, { method: "POST" }).catch(() => {});
     };
+
     const onScroll = () => {
       const containerRect = el.getBoundingClientRect();
+
+      // Определяем: пользователь внизу если до конца осталось < 80px
+      const distFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+      const atBottom = distFromBottom < 80;
+      setIsAtBottom(atBottom);
+      // Сбрасываем счётчик когда добрались до низа
+      if (atBottom) setUnreadCount(0);
+
       let maxVisibleId = lastReadMessageIdRef.current;
       for (const m of messages) {
         if (m.sender_id === userId) continue;
@@ -279,6 +349,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
       }
       if (maxVisibleId > lastReadMessageIdRef.current) sendRead(maxVisibleId);
     };
+
     el.addEventListener("scroll", onScroll);
     onScroll();
     return () => el.removeEventListener("scroll", onScroll);
@@ -321,7 +392,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
   useEffect(() => {
     if (initialScrollDoneRef.current || !messages.length) return;
-    if (chat.last_read_message_id) {
+    if (safeChat.last_read_message_id) {
       const el = messageRefs.current[chat.last_read_message_id];
       el ? el.scrollIntoView({ block: "center" }) : bottomRef.current?.scrollIntoView();
     } else {
@@ -331,6 +402,33 @@ export default function ChatScreen({ userId, chat, onBack }) {
   }, [messages, chat.id]);
 
   useEffect(() => { setTypingUsers({}); }, [chat.id]);
+
+  // Сбрасываем from_id при смене чата
+  useEffect(() => {
+    batchFromIdRef.current = safeChat.last_read_message_id || 0;
+  }, [chat.id]);
+
+  // Таймер: раз в BATCH_INTERVAL_MS отправляем батч прочтения.
+  // При размонтировании (выход из чата) — отправляем финальный батч немедленно,
+  // чтобы не потерять прочитанное если пользователь пробыл в чате меньше интервала.
+  // Использует ref чтобы всегда иметь актуальную функцию (не захватывает undefined из TDZ).
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const currentReadId = lastReadMessageIdRef.current;
+      if (currentReadId > batchFromIdRef.current) {
+        sendReadBatchRef.current(currentReadId);
+      }
+    }, BATCH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(interval);
+      // Финальный батч при выходе из чата
+      const currentReadId = lastReadMessageIdRef.current;
+      if (currentReadId > batchFromIdRef.current) {
+        sendReadBatchRef.current(currentReadId);
+      }
+    };
+  }, [chat.id]);
 
   const isCreator  = (task: any) => task.creator?.id === userId;
   const isAssignee = (task: any) => task.assignments?.some((a: any) => a.user_id === userId);
@@ -383,6 +481,56 @@ export default function ChatScreen({ userId, chat, onBack }) {
     const u = members.find(m => m.id === uid);
     return u ? safeName(u) : `#${uid}`;
   };
+
+  // Отправляет батч прочтения на сервер
+  const sendReadBatch = async (toId: number) => {
+    const fromId = batchFromIdRef.current;
+    if (toId <= fromId) return; // нечего отправлять
+
+    try {
+      await fetchWithAuth(`${API}/chats/messages/read_batch/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chat_id: chat.id, from_id: fromId + 1, to_id: toId }),
+      });
+      batchFromIdRef.current = toId;
+    } catch {
+      // тихо — попробуем в следующий тик
+    }
+  };
+  // Синхронизируем ref после каждого рендера — ref всегда указывает на актуальную функцию
+  sendReadBatchRef.current = sendReadBatch;
+
+  const loadReaders = async (messageId: number, senderId: number, silent = false) => {
+    // silent=true при авто-обновлении — не показываем спиннер
+    if (!silent) setReadersModal({ messageId, senderId, readers: [], loading: true });
+    try {
+      const res  = await fetchWithAuth(`${API}/chats/messages/${messageId}/readers/`);
+      const data = await res.json();
+      setReadersModal({ messageId, senderId, readers: data.data ?? [], loading: false });
+    } catch {
+      if (!silent) setReadersModal({ messageId, senderId: null, readers: [], loading: false });
+    }
+  };
+
+  // Авто-обновление модалки читателей раз в минуту
+  const readersRefreshRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (!readersModal) {
+      if (readersRefreshRef.current) clearInterval(readersRefreshRef.current);
+      return;
+    }
+    const { messageId, senderId } = readersModal;
+    readersRefreshRef.current = setInterval(() => {
+      if (senderId !== null) loadReaders(messageId, senderId, true);
+    }, 60_000);
+    return () => {
+      if (readersRefreshRef.current) clearInterval(readersRefreshRef.current);
+    };
+  }, [readersModal?.messageId]); // перезапускаем только при смене сообщения
+
+  // Закрываем контекстное меню по клику в любом месте
+  const closeCtxMenu = () => setCtxMenu(null);
 
   const renderMessageContent = (m: Message) => {
     if (m.is_deleted) return <span style={{ fontStyle: "italic", color: "var(--c-ink-ghost)" }}>Сообщение удалено</span>;
@@ -472,7 +620,14 @@ export default function ChatScreen({ userId, chat, onBack }) {
                 </button>
               )}
 
-              <div style={{ position: "relative", maxWidth: "62%" }} className="msg-wrap">
+              <div
+                style={{ position: "relative", maxWidth: "62%" }}
+                className="msg-wrap"
+                onContextMenu={e => {
+                  e.preventDefault();
+                  setCtxMenu({ x: e.clientX, y: e.clientY, messageId: m.id, isSelf: m.is_self, senderId: m.sender_id, isDeleted: m.is_deleted });
+                }}
+              >
                 {/* Sender name for other users */}
                 {!m.is_self && !m.is_deleted && (
                   <div style={{ fontSize: 11, fontWeight: 700, color: "var(--c-brand)", marginBottom: 3, paddingLeft: 2 }}>
@@ -494,7 +649,8 @@ export default function ChatScreen({ userId, chat, onBack }) {
                   <div style={{
                     display: "flex", gap: 4, fontSize: 10, marginTop: 4,
                     justifyContent: "flex-end", alignItems: "center",
-                    color: m.is_self ? "rgba(255,255,255,0.6)" : "var(--c-ink-ghost)",
+                    // удалённое сообщение всегда серый фон — белый цвет не виден
+                    color: m.is_deleted ? "var(--c-ink-ghost)" : m.is_self ? "rgba(255,255,255,0.6)" : "var(--c-ink-ghost)",
                   }}>
                     <span>{formatTime(m.timestamp)}</span>
                     {!m.is_deleted && m.edited && <span>· изм.</span>}
@@ -525,6 +681,24 @@ export default function ChatScreen({ userId, chat, onBack }) {
         })}
         <div ref={bottomRef} />
       </main>
+
+      {/* ── Кнопка "вниз" — появляется когда пользователь не внизу ── */}
+      {!isAtBottom && (
+        <div style={s.scrollBtnWrap}>
+          <button onClick={scrollToBottom} style={s.scrollBtn} title="Вниз">
+            {/* Стрелка вниз */}
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+            {unreadCount > 0 && (
+              <span style={s.scrollBtnBadge}>
+                {unreadCount > 99 ? "99+" : unreadCount}
+              </span>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* FOOTER */}
       <footer style={s.footer}>
@@ -813,7 +987,127 @@ export default function ChatScreen({ userId, chat, onBack }) {
         </div>
       )}
 
-      <style>{`
+      {/* ── CONTEXT MENU (ПКМ) ── */}
+      {ctxMenu && (
+        <div
+          style={{
+            position: "fixed",
+            // Если меню не влезает справа — сдвигаем влево от курсора
+            top:  Math.min(ctxMenu.y, window.innerHeight - 160),
+            left: Math.min(ctxMenu.x, window.innerWidth  - 200),
+            background: "var(--c-paper)", border: "1px solid var(--c-line)",
+            borderRadius: "var(--r-md)", boxShadow: "var(--shadow-md)",
+            zIndex: 100, minWidth: 180, overflow: "hidden",
+            animation: "modalIn 120ms ease",
+          }}
+          onClick={closeCtxMenu}
+        >
+          <div style={{ padding: "4px 0" }}>
+            <button
+              style={ctxStyle.item}
+              onClick={() => { loadReaders(ctxMenu.messageId, ctxMenu.senderId); closeCtxMenu(); }}
+            >
+              <span>👁</span> Кто прочитал
+            </button>
+            {ctxMenu.isSelf && (
+              <button
+                style={{ ...ctxStyle.item, color: "var(--c-danger)" }}
+                onClick={() => { deleteMessage(ctxMenu.messageId); closeCtxMenu(); }}
+              >
+                <span>🗑</span> Удалить
+              </button>
+            )}
+            {!ctxMenu.isDeleted && (
+              <button
+                style={ctxStyle.item}
+                onClick={() => {
+                  setTaskModalOpen(true);
+                  setTaskMessageId(ctxMenu.messageId);
+                  closeCtxMenu();
+                }}
+              >
+                <span>📌</span> Создать задачу
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Overlay для закрытия контекстного меню */}
+      {ctxMenu && (
+        <div
+          style={{ position: "fixed", inset: 0, zIndex: 99 }}
+          onClick={closeCtxMenu}
+          onContextMenu={e => { e.preventDefault(); closeCtxMenu(); }}
+        />
+      )}
+
+      {/* ── READERS MODAL ── */}
+      {readersModal && (
+        <div className="modal-backdrop">
+          <div className="modal" style={{ maxWidth: 360 }}>
+            <div className="modal-header" style={{ flexDirection: "column", alignItems: "flex-start", gap: 4 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", width: "100%" }}>
+                <span className="modal-title">👁 Прочитали сообщение</span>
+                <button className="modal-close" onClick={() => setReadersModal(null)}>✕</button>
+              </div>
+              <span style={{ fontSize: 10, color: "var(--c-ink-ghost)", fontFamily: "var(--font-mono)" }}>
+                ↻ обновляется автоматически раз в минуту
+              </span>
+            </div>
+
+            {readersModal.loading ? (
+              <div style={{ display: "flex", justifyContent: "center", padding: "24px 0" }}>
+                <span className="spinner" />
+              </div>
+            ) : readersModal.readers.length === 0 ? (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "var(--c-ink-muted)", fontSize: 13 }}>
+                <div style={{ fontSize: 28, marginBottom: 8 }}>👁</div>
+                Никто ещё не прочитал
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {readersModal.readers.map((r, i) => {
+                  const isMe   = r.user_id === userId;
+                  const name   = isMe ? "Вы" : (r.username || r.email || `#${r.user_id}`);
+                  const readTime = r.read_at
+                    ? new Date(r.read_at).toLocaleString("ru-RU", {
+                        day: "2-digit", month: "short",
+                        hour: "2-digit", minute: "2-digit",
+                      })
+                    : "—";
+                  return (
+                    <div key={r.user_id} style={{
+                      display: "flex", alignItems: "center", gap: 10,
+                      padding: "10px 4px",
+                      borderBottom: i < readersModal.readers.length - 1 ? "1px solid var(--c-line-soft)" : "none",
+                      background: isMe ? "var(--c-brand-bg)" : "transparent",
+                      borderRadius: isMe ? "var(--r-md)" : 0,
+                    }}>
+                      <div className={`avatar avatar-sm ${avatarColor(r.user_id)}`}
+                        style={isMe ? { outline: "2px solid var(--c-brand)", outlineOffset: 1 } : {}}>
+                        {name[0]?.toUpperCase()}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600, color: isMe ? "var(--c-brand)" : "var(--c-ink)" }}>
+                          {name}
+                          {isMe && <span style={{ fontSize: 10, fontWeight: 400, color: "var(--c-ink-muted)", marginLeft: 6 }}>это вы</span>}
+                        </div>
+                        <div style={{ fontSize: 11, color: "var(--c-ink-muted)", marginTop: 1 }}>
+                          прочитано в {readTime}
+                        </div>
+                      </div>
+                      <span style={{ fontSize: 14, color: "var(--c-green)" }}>✔✔</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+            <style>{`
         .msg-wrap { position: relative; }
         .msg-actions {
           display: none; position: absolute; top: -20px; right: 0;
@@ -833,6 +1127,9 @@ export default function ChatScreen({ userId, chat, onBack }) {
         /* Тултип у кнопки прикрепления файла */
         .attach-wrap { position: relative; }
         .attach-wrap:hover > div[style] { display: block !important; }
+
+        /* Кнопка вниз — hover */
+        button[title="Вниз"]:hover { background: var(--c-brand-bg) !important; transform: scale(1.08); }
 
         @keyframes fadeInDown {
           from { opacity: 0; transform: translateY(-6px); }
@@ -864,6 +1161,7 @@ const s: Record<string, React.CSSProperties> = {
     display: "flex", flexDirection: "column", gap: 10,
     background: "var(--c-surface)",
     backgroundImage: "radial-gradient(circle at 100% 0%, rgba(123,31,162,0.03) 0%, transparent 50%)",
+    position: "relative" as const,  // нужен для абсолютного позиционирования кнопки вниз
   },
   systemMsg:  { textAlign: "center", fontSize: 11, color: "var(--c-ink-ghost)", fontStyle: "italic", padding: "4px 0" },
 
@@ -876,6 +1174,46 @@ const s: Record<string, React.CSSProperties> = {
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 16, cursor: "pointer", background: "var(--c-surface)", flexShrink: 0,
     transition: "background var(--t-fast)",
+  },
+
+  // Кнопка прокрутки вниз
+  scrollBtnWrap: {
+    position: "absolute" as const,
+    bottom: 90,               // над footer
+    right: 24,
+    zIndex: 20,
+    display: "flex",
+    flexDirection: "column" as const,
+    alignItems: "center",
+    gap: 4,
+    pointerEvents: "none" as const,
+  },
+  scrollBtn: {
+    width: 40, height: 40,
+    borderRadius: "var(--r-full)",
+    background: "var(--c-paper)",
+    border: "1.5px solid var(--c-line)",
+    boxShadow: "var(--shadow-md)",
+    display: "flex", alignItems: "center", justifyContent: "center",
+    cursor: "pointer",
+    color: "var(--c-brand)",
+    pointerEvents: "auto" as const,
+    transition: "background var(--t-fast), transform var(--t-fast)",
+    position: "relative" as const,
+  },
+  scrollBtnBadge: {
+    position: "absolute" as const,
+    top: -6, right: -6,
+    background: "var(--c-brand)",
+    color: "#fff",
+    borderRadius: "var(--r-full)",
+    fontSize: 9,
+    fontWeight: 700,
+    fontFamily: "var(--font-mono)",
+    padding: "1px 5px",
+    minWidth: 16,
+    textAlign: "center" as const,
+    border: "1.5px solid var(--c-paper)",
   },
 
   // Тост с ошибкой файла
@@ -910,5 +1248,16 @@ const s: Record<string, React.CSSProperties> = {
     borderRadius: "var(--r-md)", padding: "10px 12px", fontSize: 11,
     boxShadow: "var(--shadow-md)", zIndex: 20, pointerEvents: "none",
     lineHeight: 1.5,
+  },
+};
+
+const ctxStyle: Record<string, React.CSSProperties> = {
+  item: {
+    display: "flex", alignItems: "center", gap: 10,
+    width: "100%", padding: "9px 16px",
+    background: "transparent", border: "none",
+    fontSize: 13, fontWeight: 600, color: "var(--c-ink)",
+    cursor: "pointer", textAlign: "left" as const,
+    transition: "background var(--t-fast)",
   },
 };

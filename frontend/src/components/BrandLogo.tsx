@@ -1,20 +1,13 @@
 import React from "react";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Укажите путь к логотипу компании здесь.
-// Оставьте пустым — будет показана заглушка (знак аптечного креста).
-// После того как добавите файл, он автоматически появится везде в приложении.
-// ─────────────────────────────────────────────────────────────────────────────
-const LOGO_PATH = ""; // пример: "/logo/april-logo.svg"
-
 interface LogoProps {
   size?: "sm" | "md" | "lg";
   showText?: boolean;
-  onDark?: boolean; // true = светлый текст (для тёмного фона)
+  onDark?: boolean;
 }
 
 export default function BrandLogo({ size = "md", showText = true, onDark = false }: LogoProps) {
-  const dim = { sm: 24, md: 32, lg: 40 }[size];
+  const dim       = { sm: 24, md: 32, lg: 40 }[size];
   const titleSize = { sm: 13, md: 16, lg: 20 }[size];
   const subSize   = { sm: 9,  md: 10, lg: 11 }[size];
 
@@ -23,27 +16,26 @@ export default function BrandLogo({ size = "md", showText = true, onDark = false
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 9, flexShrink: 0 }}>
-      {LOGO_PATH ? (
-        <img
-          src={LOGO_PATH}
-          alt="Апрель"
-          style={{ width: dim, height: dim, objectFit: "contain", borderRadius: 8 }}
-        />
-      ) : (
-        /* Заглушка — аптечный крест в зелёном кружке */
-        <div style={{
-          width: dim, height: dim,
-          background: "linear-gradient(135deg, #00897B, #26A69A)",
-          borderRadius: Math.round(dim * 0.28),
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0,
-        }}>
-          <svg width={dim * 0.58} height={dim * 0.58} viewBox="0 0 20 20" fill="none">
-            <rect x="7.5" y="2" width="5" height="16" rx="2" fill="white"/>
-            <rect x="2"   y="7.5" width="16" height="5" rx="2" fill="white"/>
-          </svg>
-        </div>
-      )}
+      {/* Логотип Апрель — инлайн SVG, не зависит от путей и сервера */}
+      <svg
+        viewBox="0 0 474.66666 486.66666"
+        width={dim}
+        height={dim}
+        style={{ flexShrink: 0 }}
+        aria-label="Апрель"
+      >
+        <g transform="matrix(1.3333333,0,0,-1.3333333,0,486.66667)">
+          <g transform="scale(0.1)">
+            <path
+              fill="#ff0089"
+              fillOpacity={1}
+              fillRule="nonzero"
+              stroke="none"
+              d="M 1783.36,3649.25 C 803.008,3649.25 8.66406,2834.29 8.66406,1829.45 8.66406,824.605 803.008,9.67969 1783.36,9.67969 c 980.34,0 1773.19,814.92531 1773.19,1819.77031 0,1004.84 -792.85,1819.8 -1773.19,1819.8 z M 3082.62,1921.66 h -972.55 c -8.8,-0.53 -16.59,3.99 -22.01,10.79 -5.37,6.91 -6.4,16.7 -2.99,25.1 l 352.31,983.27 c 2.03,11.68 12.82,20.08 24.5,19.09 h 16.7 c 353.7,-231.61 577.55,-616.22 604.04,-1038.25 z M 480.18,1829.45 c 0,737.95 582.96,1336.07 1302.68,1336.07 72.6,0 144.69,-6.4 216.4,-18.69 L 1119.54,680.406 C 720.582,925.723 478.188,1360.96 480.68,1829.45 Z M 1783.36,493.871 c -70.22,0 -140.82,5.41 -210,17.231 l 316.88,910.138 c 3.53,10.79 13.32,18.58 25.14,19.58 H 3030.63 C 2868.7,892.293 2370.7,493.871 1783.36,493.871"
+            />
+          </g>
+        </g>
+      </svg>
 
       {showText && (
         <div style={{ lineHeight: 1 }}>

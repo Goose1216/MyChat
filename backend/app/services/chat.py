@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 import logging
 from sqlalchemy.exc import IntegrityError
 
@@ -147,7 +148,8 @@ class ChatService:
                 last_message = await uow.message.get_last_for_chat(chat.id)
                 chat_participant = await uow.chat_participant.get_one_by(chat_id=chat.id, user_id=user_id)
                 last_read_message_id = chat_participant.last_read_message_id
-                max_other_read_id = await uow.chat_participant.get_max_other_read_id(chat_id=chat.id)
+                max_other_read_id = await uow.chat_participant.get_max_other_read_id(
+                    chat_id=chat.id, user_id=user_id)
 
                 chat = ChatSchemaFromBd.model_validate(chat)
                 chat = chat.model_dump()
@@ -230,6 +232,66 @@ class ChatService:
             users_for_return = [UserSchemaFromBd.model_validate(user) for user in users]
             return users_for_return
 
+    async def create_read_batch(
+        self,
+        user_id: int,
+        chat_id: int,
+        from_id: int,
+        to_id: int,
+    ) -> None:
+        """
+        Сохраняет батч прочтения: пользователь user_id прочитал сообщения
+        [from_id, to_id] в чате chat_id примерно в момент вызова.
+        Также обновляет last_read_message_id если to_id больше текущего.
+        """
+        async with self.uow as uow:
+            # Записываем батч
+            await uow.message_read_batch.create_batch(
+                user_id=user_id,
+                chat_id=chat_id,
+                from_id=from_id,
+                to_id=to_id,
+            )
+            # Синхронно обновляем last_read_message_id если надо
+            participant = await uow.chat_participant.get_one_by(
+                chat_id=chat_id, user_id=user_id
+            )
+            if participant and to_id > participant.last_read_message_id:
+                participant.last_read_message_id = to_id
+            await uow.commit()
 
+    async def get_message_readers(
+        self,
+        message_id: int,
+        requester_id: int,
+    ) -> list[dict]:
+        """
+        Возвращает список читателей сообщения message_id с временем прочтения.
+        Исключает автора сообщения (sender_id) — он сам знает что написал.
+        Включает текущего пользователя (requester_id) если он прочитал.
+        Время — приблизительное (с погрешностью до интервала батчинга на фронте).
+        """
+        async with self.uow as uow:
+            message = await uow.message.get_one(pk=message_id)
+            if not message:
+                raise UnfoundEntity(detail="Сообщение не найдено")
 
+            # Исключаем автора сообщения, а не того кто запрашивает
+            sender_id = message.sender_id
 
+            rows = await uow.message_read_batch.get_readers_for_message(
+                chat_id=message.chat_id,
+                message_id=message_id,
+                exclude_user_id=sender_id,
+            )
+
+            result = []
+            for row in rows:
+                user = await uow.user.get_one(pk=row.user_id)
+                result.append({
+                    "user_id":  row.user_id,
+                    "username": user.username if user else None,
+                    "email":    user.email    if user else None,
+                    "read_at":  row.read_at,
+                })
+            return result

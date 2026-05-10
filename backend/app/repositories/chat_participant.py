@@ -8,11 +8,12 @@ from app.security import security
 class ChatParticipantRepository(Repository):
     model = ChatParticipant
 
-    async def get_max_other_read_id(self, chat_id: int) -> int:
+    async def get_max_other_read_id(self, chat_id: int, user_id: int) -> int:
         stmt = (
             select(func.max(self.model.last_read_message_id))
             .where(
                 self.model.chat_id == chat_id,
+                self.model.user_id != user_id,
             )
         )
         res = await self.session.execute(stmt)

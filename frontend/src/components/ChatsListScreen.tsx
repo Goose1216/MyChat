@@ -79,7 +79,18 @@ export default function ChatsListScreen({
     setLoading(true);
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/chats`, { method: "GET" });
-      if (res.ok) { const d = await res.json(); setChats(d.data ?? []); }
+      if (res.ok) {
+        const d = await res.json();
+        // Нормализуем: гарантируем наличие полей которые могут отсутствовать
+        // в старых данных (до миграции бэкенда)
+        const normalized = (d.data ?? []).map((c: any) => ({
+          ...c,
+          max_other_read_id:   c.max_other_read_id   ?? 0,
+          cnt_unread_messages: c.cnt_unread_messages  ?? 0,
+          last_read_message_id: c.last_read_message_id ?? 0,
+        }));
+        setChats(normalized);
+      }
       else if (res.status === 401) { alert("Сессия истекла."); onLogout(); }
     } catch { }
     finally { setLoading(false); }
@@ -148,7 +159,8 @@ export default function ChatsListScreen({
 
   const getAvClass   = (id: number) => AVATAR_CLASSES[id % AVATAR_CLASSES.length];
   const getInitials  = (chat: any) => (chat.title || `#${chat.id}`).slice(0, 2).toUpperCase();
-  const totalUnread  = chats.reduce((n, c) => n + (c.cnt_unread_messages ?? 0), 0);
+  // Количество чатов где есть непрочитанные (а не сумма сообщений)
+  const totalUnread  = chats.filter(c => (c.cnt_unread_messages ?? 0) > 0).length;
 
   const filtered = search.trim()
     ? chats.filter(c => (c.title || `Чат #${c.id}`).toLowerCase().includes(search.toLowerCase()))

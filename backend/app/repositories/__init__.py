@@ -7,3 +7,4 @@ from .user import UserRepository
 from .file import FileRepository
 from .task import TaskRepository
 from .task_assigment import TaskAssignmentRepository
+from .message_read_batch import MessageReadBatchRepository

@@ -5,6 +5,7 @@ from typing import Dict, Set, List
 
 from app.services import ChatService, MessageService, UserService
 from app.app import schemas
+from app.app.schemas.chats import ReadBatchCreateSchema, MessageReaderSchema
 from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
                                    ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork
@@ -128,6 +129,50 @@ async def get_all_messages_for_chat(
     chat_service = ChatService(uow)
     messages = await chat_service.get_all_message_for_chat_for_member(chat_id=chat_id, member_id=access_token.get("user_id"))
     return schemas.Response(data=messages)
+
+
+@chats.post(
+    "/messages/read_batch/",
+    response_model=schemas.Response[None],
+    name="Записать батч прочтения",
+    description="Фронт вызывает раз в N минут, передавая диапазон прочитанных сообщений",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def create_read_batch(
+    data: ReadBatchCreateSchema,
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_id = int(access_token.get("user_id"))
+    chat_service = ChatService(uow)
+    await chat_service.create_read_batch(
+        user_id=user_id,
+        chat_id=data.chat_id,
+        from_id=data.from_id,
+        to_id=data.to_id,
+    )
+    return schemas.Response(data=None)
+
+
+@chats.get(
+    "/messages/{message_id}/readers/",
+    response_model=schemas.Response[List[MessageReaderSchema]],
+    name="Кто и когда прочитал сообщение",
+    description="Возвращает список читателей с приблизительным временем прочтения (±батч-интервал)",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def get_message_readers(
+    message_id: int,
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_id = int(access_token.get("user_id"))
+    chat_service = ChatService(uow)
+    readers = await chat_service.get_message_readers(
+        message_id=message_id,
+        requester_id=user_id,
+    )
+    return schemas.Response(data=readers)
 
 @chats.post(
     "/{chat_id}/{user_id}/typing/",

@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME
+from sqlalchemy import String, ForeignKey, DateTime, Text, Boolean, BigInteger, func, UniqueConstraint, Enum, DATETIME, Index
 from datetime import datetime
 from typing import Optional, List
 import enum
@@ -243,3 +243,29 @@ class Task(Base):
         lazy="selectin",
     )
 
+class MessageReadBatch(Base):
+    """
+    Хранит факт прочтения диапазона сообщений пользователем.
+    Вместо записи каждого прочитанного сообщения отдельно — пишем батч
+    раз в N минут: "пользователь прочитал сообщения from_id..to_id в момент read_at".
+
+    Индексы:
+      - (chat_id, to_id)   — быстрый ответ на вопрос "кто прочитал сообщение M?"
+      - (user_id, chat_id) — быстрый ответ на вопрос "что читал пользователь в чате?"
+    """
+    __tablename__ = 'message_read_batches'
+
+    user_id:  Mapped[int]      = mapped_column(BigInteger, ForeignKey('users.id', ondelete='CASCADE'), nullable=False, index=True)
+    chat_id:  Mapped[int]      = mapped_column(BigInteger, ForeignKey('chats.id', ondelete='CASCADE'), nullable=False, index=True)
+    from_id:  Mapped[int]      = mapped_column(BigInteger, nullable=False)
+    to_id:    Mapped[int]      = mapped_column(BigInteger, nullable=False)
+    read_at:  Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    user: Mapped['User'] = relationship('User')
+    chat: Mapped['Chat'] = relationship('Chat')
+
+    __table_args__ = (
+        # Главный индекс для запроса "кто прочитал сообщение M в чате C"
+        # WHERE chat_id=C AND from_id <= M AND to_id >= M
+        Index('idx_mrb_chat_range', 'chat_id', 'from_id', 'to_id'),
+    )
