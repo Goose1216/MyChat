@@ -48,9 +48,16 @@ function validateFile(file: File): string | null {
   return null;
 }
 
+const STATUS_LABELS: Record<string, string> = {
+  NEW: "Новая", IN_PROGRESS: "В работе", DONE: "Выполнена", CANCELLED: "Отменена",
+};
+const PRIORITY_LABELS: Record<string, string> = {
+  LOW: "Низкий", MEDIUM: "Средний", HIGH: "Высокий",
+};
+
 function StatusPill({ status }: { status: string }) {
   const map: Record<string, string> = { NEW: "pill-new", IN_PROGRESS: "pill-prog", DONE: "pill-done", CANCELLED: "pill-cancel" };
-  return <span className={`pill ${map[status] || "pill-cancel"}`}>{status}</span>;
+  return <span className={`pill ${map[status] || "pill-cancel"}`}>{STATUS_LABELS[status] ?? status}</span>;
 }
 
 export default function ChatScreen({ userId, chat, onBack }) {
@@ -841,7 +848,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
                             <textarea value={editingTaskDescription} onChange={e => setEditingTaskDescription(e.target.value)} className="input" rows={2} />
                             {(isCreator(t) || isAssignee(t)) && (
                               <select value={editingTaskStatus} onChange={e => setEditingTaskStatus(e.target.value)} className="input" style={{ fontSize: 12 }}>
-                                {STATUS_OPTIONS.map(st => <option key={st} value={st}>{st}</option>)}
+                                {STATUS_OPTIONS.map(st => <option key={st} value={st}>{STATUS_LABELS[st] ?? st}</option>)}
                               </select>
                             )}
                             <div style={{ display: "flex", gap: 8 }}>
@@ -866,7 +873,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
                                     try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: ns }) }); }
                                     catch { setTasks(p => p.map(tk => tk.id === t.id ? { ...tk, status: t.status } : tk)); }
                                   }}>
-                                  {STATUS_OPTIONS.map(st => <option key={st} value={st}>{st}</option>)}
+                                  {STATUS_OPTIONS.map(st => <option key={st} value={st}>{STATUS_LABELS[st] ?? st}</option>)}
                                 </select>
                               ) : <StatusPill status={t.status} />}
                               <select value={t.priority} className="input" style={{ fontSize: 11, padding: "2px 24px 2px 8px", height: 26, width: "auto" }}
@@ -876,7 +883,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
                                   try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: np }) }); }
                                   catch { setTasks(p => p.map(tk => tk.id === t.id ? { ...tk, priority: t.priority } : tk)); }
                                 }}>
-                                {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{p}</option>)}
+                                {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p] ?? p}</option>)}
                               </select>
                               {isCreator(t) && (
                                 <button className="btn btn-ghost" style={{ fontSize: 11 }}

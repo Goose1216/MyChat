@@ -11,15 +11,38 @@ const userBg    = (idx: number) => USER_COLORS[idx % USER_COLORS.length] + "18";
 
 // ─── status / priority meta ──────────────────────────────────────────────────
 const STATUS_META: Record<string, { label: string; color: string; bg: string }> = {
-  NEW:         { label: "New",         color: "#2563eb", bg: "#eff4ff" },
-  IN_PROGRESS: { label: "In Progress", color: "#d97706", bg: "#fffbeb" },
-  DONE:        { label: "Done",        color: "#16a34a", bg: "#f0fdf4" },
-  CANCELLED:   { label: "Cancelled",   color: "#6b6b6b", bg: "#f2f2ef" },
+  NEW:         { label: "Новая",     color: "#2563eb", bg: "#eff4ff" },
+  IN_PROGRESS: { label: "В работе",  color: "#d97706", bg: "#fffbeb" },
+  DONE:        { label: "Выполнена", color: "#16a34a", bg: "#f0fdf4" },
+  CANCELLED:   { label: "Отменена",  color: "#6b6b6b", bg: "#f2f2ef" },
 };
 const PRIORITY_META: Record<string, { label: string; color: string; bg: string }> = {
-  LOW:    { label: "Low",    color: "#6b6b6b", bg: "#f2f2ef" },
-  MEDIUM: { label: "Medium", color: "#d97706", bg: "#fffbeb" },
-  HIGH:   { label: "High",   color: "#dc2626", bg: "#fef2f2" },
+  LOW:    { label: "Низкий",  color: "#6b6b6b", bg: "#f2f2ef" },
+  MEDIUM: { label: "Средний", color: "#d97706", bg: "#fffbeb" },
+  HIGH:   { label: "Высокий", color: "#dc2626", bg: "#fef2f2" },
+};
+
+// Нормализованный поиск — работает с любым регистром и форматом:
+// "new", "NEW", "New", "in_progress", "IN_PROGRESS", "In Progress", "in progress"
+const normalizeKey = (k: string) => {
+  if (!k) return "";
+
+  return k
+    .trim()
+    .toUpperCase()
+    .replace(/\s+/g, "_")
+    .replace(/-/g, "_")
+    .replace("INPROGRESS", "IN_PROGRESS")
+    .replace("IN PROGRESS", "IN_PROGRESS")
+    .replace("CANCELED", "CANCELLED");
+};
+const getStatus   = (k: string) => {
+  const nk = normalizeKey(k);
+  return STATUS_META[nk] ?? STATUS_META[k] ?? { label: k ?? "—", color: "#6b6b6b", bg: "#f2f2ef" };
+};
+const getPriority = (k: string) => {
+  const nk = normalizeKey(k);
+  return PRIORITY_META[nk] ?? PRIORITY_META[k] ?? { label: k ?? "—", color: "#6b6b6b", bg: "#f2f2ef" };
 };
 
 // ─── tiny donut SVG ──────────────────────────────────────────────────────────
@@ -108,8 +131,20 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
   const maxTotal = Math.max(...stats.map((s) => s.total_tasks), 1);
 
   // aggregate for global summary bar
-  const allStatuses  = Array.from(new Set(stats.flatMap((s) => s.by_status.map((x) => x.status))));
-  const allPriorities = Array.from(new Set(stats.flatMap((s) => s.by_priority.map((x) => x.priority))));
+ const allStatuses = Array.from(
+  new Set(
+    stats.flatMap((s) =>
+      s.by_status.map((x) => normalizeKey(x.status))
+    )
+  )
+);
+ const allPriorities = Array.from(
+  new Set(
+    stats.flatMap((s) =>
+      s.by_priority.map((x) => normalizeKey(x.priority))
+    )
+  )
+);
 
   return (
     <div style={ds.root}>
@@ -122,7 +157,7 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
             .sort((a, b) => b.total_tasks - a.total_tasks)
             .map((s, idx) => {
               const name = getName ? getName(s.user_id) : `#${s.user_id}`;
-              const done = s.by_status.find((x) => x.status === "DONE")?.count ?? 0;
+              const done = s.by_status.find((x) => normalizeKey(x.status) === "DONE")?.count ?? 0;
               const pct  = s.total_tasks > 0 ? Math.round((done / s.total_tasks) * 100) : 0;
               return (
                 <div key={s.user_id} style={ds.leaderRow}>
@@ -136,7 +171,7 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
                   <div style={ds.leaderMeta}>
                     <span style={ds.leaderTotal}>{s.total_tasks}</span>
                     <span style={{ ...ds.leaderDone, color: pct >= 50 ? "var(--c-success)" : "var(--c-ink-ghost)" }}>
-                      {pct}% done
+                      {pct}% выполнено
                     </span>
                   </div>
                 </div>
@@ -154,14 +189,14 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
 
             const statusSlices = s.by_status.map((x) => ({
               value: x.count,
-              color: STATUS_META[x.status]?.color ?? "#6b6b6b",
-              label: STATUS_META[x.status]?.label ?? x.status,
+              color: getStatus(normalizeKey(x.status)).color,
+              label: getStatus(normalizeKey(x.status))?.label ?? getStatus(normalizeKey(x.status)).label,
             }));
 
             const prioritySlices = s.by_priority.map((x) => ({
               value: x.count,
-              color: PRIORITY_META[x.priority]?.color ?? "#6b6b6b",
-              label: PRIORITY_META[x.priority]?.label ?? x.priority,
+              color: getPriority(x.priority).color,
+              label: getPriority(x.priority)?.label ?? getPriority(x.priority).label,
             }));
 
             return (
@@ -185,9 +220,9 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
                     <div style={ds.donutLabel}>Статусы</div>
                     <div style={ds.legend}>
                       {s.by_status.filter((x) => x.count > 0).map((x) => (
-                        <div key={x.status} style={ds.legendItem}>
-                          <span style={{ ...ds.legendDot, background: STATUS_META[x.status]?.color ?? "#6b6b6b" }} />
-                          <span style={ds.legendText}>{STATUS_META[x.status]?.label ?? x.status}</span>
+                        <div key={normalizeKey(x.status)} style={ds.legendItem}>
+                          <span style={{ ...ds.legendDot, background: getStatus(normalizeKey(x.status)).color }} />
+                          <span style={ds.legendText}>{getStatus(normalizeKey(x.status)).label}</span>
                           <span style={ds.legendCount}>{x.count}</span>
                         </div>
                       ))}
@@ -203,8 +238,8 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
                     <div style={ds.legend}>
                       {s.by_priority.filter((x) => x.count > 0).map((x) => (
                         <div key={x.priority} style={ds.legendItem}>
-                          <span style={{ ...ds.legendDot, background: PRIORITY_META[x.priority]?.color ?? "#6b6b6b" }} />
-                          <span style={ds.legendText}>{PRIORITY_META[x.priority]?.label ?? x.priority}</span>
+                          <span style={{ ...ds.legendDot, background: getPriority(x.priority).color }} />
+                          <span style={ds.legendText}>{getPriority(x.priority).label}</span>
                           <span style={ds.legendCount}>{x.count}</span>
                         </div>
                       ))}
@@ -215,15 +250,15 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
                 {/* status progress bars */}
                 <div style={ds.bars}>
                   {s.by_status.map((x) => {
-                    const meta = STATUS_META[x.status];
+                    const meta = getStatus(normalizeKey(x.status));
                     const pct  = s.total_tasks > 0 ? (x.count / s.total_tasks) * 100 : 0;
                     return (
-                      <div key={x.status} style={ds.barRow}>
-                        <span style={{ ...ds.barLabel, color: meta?.color ?? "#6b6b6b" }}>
-                          {meta?.label ?? x.status}
+                      <div key={normalizeKey(x.status)} style={ds.barRow}>
+                        <span style={{ ...ds.barLabel, color: meta.color ?? "#6b6b6b" }}>
+                          {meta.label}
                         </span>
                         <div style={ds.hbarWrap}>
-                          <div style={{ ...ds.hbarFill, width: `${pct}%`, background: meta?.color ?? "#6b6b6b" }} />
+                          <div style={{ ...ds.hbarFill, width: `${pct}%`, background: meta.color ?? "#6b6b6b" }} />
                         </div>
                         <span style={ds.barCount}>{x.count}</span>
                       </div>
@@ -246,8 +281,8 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
                 <tr>
                   <th style={ds.th}>Пользователь</th>
                   {allStatuses.map((s) => (
-                    <th key={s} style={{ ...ds.th, color: STATUS_META[s]?.color ?? "#6b6b6b" }}>
-                      {STATUS_META[s]?.label ?? s}
+                    <th key={s} style={{ ...ds.th, color: getStatus(s).color }}>
+                      {getStatus(s).label}
                     </th>
                   ))}
                   <th style={ds.th}>Всего</th>
@@ -267,11 +302,14 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
                         </div>
                       </td>
                       {allStatuses.map((st) => {
-                        const val = row.by_status.find((x) => x.status === st)?.count ?? 0;
+                        const val =
+  row.by_status.find(
+    (x) => (normalizeKey(x.status)) === st
+  )?.count ?? 0;
                         return (
                           <td key={st} style={{ ...ds.td, textAlign: "center" }}>
                             {val > 0
-                              ? <span style={{ ...ds.tableCell, background: STATUS_META[st]?.bg, color: STATUS_META[st]?.color }}>{val}</span>
+                              ? <span style={{ ...ds.tableCell, background: getStatus(st).bg, color: getStatus(st).color }}>{val}</span>
                               : <span style={{ color: "var(--c-ink-ghost)", fontSize: 11 }}>—</span>
                             }
                           </td>
