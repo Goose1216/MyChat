@@ -476,6 +476,10 @@ export default function ChatScreen({ userId, chat, onBack }) {
   };
 
   const createTask = async () => {
+    if (isChannel && !canManageTasks) {
+      alert("Недостаточно прав");
+      return;
+    }
     if (!taskTitle.trim()) { alert("Введите название задачи"); return; }
     if (!taskMessageId)    { alert("Ошибка: нет message_id"); return; }
     if (creatingTask)      return;
@@ -578,6 +582,10 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
   // В канале писать могут только owner и admin; в остальных чатах — все
   const isChannel = safeChat.chat_type === "channel";
+  const canManageTasks =
+  !isChannel ||
+  myRole === "owner" ||
+  myRole === "admin";
   const canWrite  = !isChannel || myRole === "owner" || myRole === "admin";
   // Для управления участниками канала (смена ролей)
   const isOwner   = myRole === "owner";
@@ -686,15 +694,34 @@ export default function ChatScreen({ userId, chat, onBack }) {
                 </div>
 
                 {!m.is_deleted && (
-                  <div className="msg-actions">
-                    {m.is_self && (
-                      <button className="msg-action-btn msg-action-delete" onClick={() => deleteMessage(m.id)} title="Удалить">🗑</button>
-                    )}
-                    <button className="msg-action-btn msg-action-task"
-                      onClick={() => { setTaskModalOpen(true); setTaskMessageId(m.id); setTaskTitle(m.text || ""); setTaskDescription(""); setTaskAssignees([]); }}
-                      title="Создать задачу">📌</button>
-                  </div>
-                )}
+                <div className="msg-actions">
+                  {m.is_self && (
+                    <button
+                      className="msg-action-btn msg-action-delete"
+                      onClick={() => deleteMessage(m.id)}
+                      title="Удалить"
+                    >
+                      🗑
+                    </button>
+                  )}
+
+                  {canManageTasks && (
+                    <button
+                      className="msg-action-btn msg-action-task"
+                      onClick={() => {
+                        setTaskModalOpen(true);
+                        setTaskMessageId(m.id);
+                        setTaskTitle(m.text || "");
+                        setTaskDescription("");
+                        setTaskAssignees([]);
+                      }}
+                      title="Создать задачу"
+                    >
+                      📌
+                    </button>
+                  )}
+                </div>
+              )}
               </div>
 
               {/* Self avatar — right side (optional, subtle) */}
@@ -873,7 +900,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
                           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                             <input value={editingTaskTitle} onChange={e => setEditingTaskTitle(e.target.value)} className="input" />
                             <textarea value={editingTaskDescription} onChange={e => setEditingTaskDescription(e.target.value)} className="input" rows={2} />
-                            {(isCreator(t) || isAssignee(t)) && (
+                            {canManageTasks && (isCreator(t) || isAssignee(t)) && (
                               <select value={editingTaskStatus} onChange={e => setEditingTaskStatus(e.target.value)} className="input" style={{ fontSize: 12 }}>
                                 {STATUS_OPTIONS.map(st => <option key={st} value={st}>{STATUS_LABELS[st] ?? st}</option>)}
                               </select>
@@ -903,15 +930,37 @@ export default function ChatScreen({ userId, chat, onBack }) {
                                   {STATUS_OPTIONS.map(st => <option key={st} value={st}>{STATUS_LABELS[st] ?? st}</option>)}
                                 </select>
                               ) : <StatusPill status={t.status} />}
-                              <select value={t.priority} className="input" style={{ fontSize: 11, padding: "2px 24px 2px 8px", height: 26, width: "auto" }}
+                              {canManageTasks ? (
+                              <select
+                                value={t.priority}
+                                className="input"
+                                style={{ fontSize: 11, padding: "2px 24px 2px 8px", height: 26, width: "auto" }}
                                 onChange={async e => {
                                   const np = e.target.value;
                                   setTasks(p => p.map(tk => tk.id === t.id ? { ...tk, priority: np } : tk));
-                                  try { await fetchWithAuth(`${API}/tasks/${t.id}/`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ priority: np }) }); }
-                                  catch { setTasks(p => p.map(tk => tk.id === t.id ? { ...tk, priority: t.priority } : tk)); }
-                                }}>
-                                {PRIORITY_OPTIONS.map(p => <option key={p} value={p}>{PRIORITY_LABELS[p] ?? p}</option>)}
+
+                                  try {
+                                    await fetchWithAuth(`${API}/tasks/${t.id}/`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ priority: np }),
+                                    });
+                                  } catch {
+                                    setTasks(p => p.map(tk => tk.id === t.id ? { ...tk, priority: t.priority } : tk));
+                                  }
+                                }}
+                              >
+                                {PRIORITY_OPTIONS.map(p => (
+                                  <option key={p} value={p}>
+                                    {PRIORITY_LABELS[p] ?? p}
+                                  </option>
+                                ))}
                               </select>
+                            ) : (
+                              <span className="pill">
+                                {PRIORITY_LABELS[t.priority] ?? t.priority}
+                              </span>
+                            )}
                               {isCreator(t) && (
                                 <button className="btn btn-ghost" style={{ fontSize: 11 }}
                                   onClick={() => { setEditingTaskId(t.id); setEditingTaskTitle(t.title || ""); setEditingTaskDescription(t.description || ""); setEditingTaskStatus(t.status); }}>
@@ -1051,7 +1100,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
                 <span>🗑</span> Удалить
               </button>
             )}
-            {!ctxMenu.isDeleted && (
+          {!ctxMenu.isDeleted && canManageTasks && (
               <button
                 style={ctxStyle.item}
                 onClick={() => {
