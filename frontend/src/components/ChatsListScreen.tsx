@@ -254,9 +254,9 @@ export default function ChatsListScreen({
                     {chat.cnt_unread_messages > 0 && (
                       <span style={s.unread}>{chat.cnt_unread_messages > 99 ? "99+" : chat.cnt_unread_messages}</span>
                     )}
-                    {chat.chat_type && (
-                      <span style={s.typePill}>{chat.chat_type.toUpperCase()}</span>
-                    )}
+                    {chat.chat_type === "channel" && <span title="Канал"   style={s.typeIcon}>📢</span>}
+                    {chat.chat_type === "group"   && <span title="Группа"  style={s.typeIcon}>👥</span>}
+                    {chat.chat_type === "private" && <span title="Личный"  style={s.typeIcon}>💬</span>}
                   </div>
                 </div>
               );
@@ -350,5 +350,5 @@ const s: Record<string, React.CSSProperties> = {
   unread:      { background: "var(--c-brand)", color: "#fff", borderRadius: "var(--r-full)",
                  fontSize: 10, fontWeight: 700, padding: "1px 7px",
                  fontFamily: "var(--font-mono)", minWidth: 20, textAlign: "center" as const },
-  typePill:    { fontSize: 9, color: "var(--c-ink-ghost)", fontFamily: "var(--font-mono)", fontWeight: 600 },
+  typeIcon:    { fontSize: 13, opacity: 0.6 },
 };

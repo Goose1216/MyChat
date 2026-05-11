@@ -5,12 +5,11 @@ from typing import Dict, Set, List
 
 from app.services import ChatService, MessageService, UserService
 from app.app import schemas
-from app.app.schemas.chats import ReadBatchCreateSchema, MessageReaderSchema
 from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
                                    ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork
 from app.security import security
-from app.db.models import ChatType
+from app.db.models import ChatType, UserRole
 from app.app.schemas.response import Response
 from app.utils.response import get_responses_description_by_codes
 from app.utils import manager, get_unit_of_work
@@ -83,6 +82,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
 
+
 @chats.get(
     '/',
     response_model=schemas.Response[List[schemas.ChatSchemaFromBdWithLastMessage]],
@@ -97,6 +97,7 @@ async def get_all_chat_for_user(
     chat_service = ChatService(uow)
     chat = await chat_service.get_all_for_user_with_last_message(user_id)
     return schemas.Response(data=chat)
+
 
 @chats.get(
     "/{chat_id}/members/",
@@ -113,6 +114,7 @@ async def get_all_members_for_chat(
     chat_service = ChatService(uow)
     members = await chat_service.get_members_for_member(chat_id=chat_id, member_id=int(access_token.get("user_id")))
     return schemas.Response(data=members)
+
 
 @chats.get(
     "/{chat_id}/messages/",
@@ -131,6 +133,59 @@ async def get_all_messages_for_chat(
     return schemas.Response(data=messages)
 
 
+@chats.get(
+    "/{chat_id}/my_role/",
+    response_model=schemas.Response[str],
+    name="Получить свою роль в чате",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def get_my_role(
+    chat_id: int,
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_id = int(access_token.get("user_id"))
+    chat_service = ChatService(uow)
+    participant = await chat_service.check_user_in_chat(chat_id, user_id, return_role=True)
+    if not participant:
+        raise HTTPException(status_code=404, detail="Вы не состоите в этом чате")
+    return schemas.Response(data=participant)
+
+
+@chats.patch(
+    "/{chat_id}/members/{member_id}/role/",
+    response_model=schemas.Response[None],
+    name="Изменить роль участника",
+    description="Только OWNER может менять роли. Для канала: ADMIN = право писать, MEMBER = только читать.",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def change_member_role(
+    chat_id: int,
+    member_id: int,
+    role: str,
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_id = int(access_token.get("user_id"))
+    chat_service = ChatService(uow)
+
+    # Проверяем что текущий пользователь — OWNER
+    my_participant = await chat_service.check_user_in_chat(chat_id, user_id)
+    if not my_participant:
+        raise HTTPException(status_code=403, detail="Вы не состоите в этом чате")
+    my_role = str(my_participant.role.value if hasattr(my_participant.role, "value") else my_participant.role).upper()
+    if my_role != "OWNER":
+        raise HTTPException(status_code=403, detail="Только владелец может менять роли участников")
+
+    # Меняем роль
+    role_upper = role.upper()
+    if role_upper not in ("MEMBER", "ADMIN"):
+        raise HTTPException(status_code=400, detail="Допустимые роли: MEMBER, ADMIN")
+
+    await chat_service.change_member_role(chat_id=chat_id, user_id=member_id, role=role_upper)
+    return schemas.Response(data=None)
+
+
 @chats.post(
     "/messages/read_batch/",
     response_model=schemas.Response[None],
@@ -139,7 +194,7 @@ async def get_all_messages_for_chat(
     responses=get_responses_description_by_codes([401, 403, 404])
 )
 async def create_read_batch(
-    data: ReadBatchCreateSchema,
+    data: schemas.ReadBatchCreateSchema,
     access_token=Depends(security.decode_jwt_access),
     uow: IUnitOfWork = Depends(get_unit_of_work),
 ):
@@ -156,7 +211,7 @@ async def create_read_batch(
 
 @chats.get(
     "/messages/{message_id}/readers/",
-    response_model=schemas.Response[List[MessageReaderSchema]],
+    response_model=schemas.Response[List[schemas.MessageReaderSchema]],
     name="Кто и когда прочитал сообщение",
     description="Возвращает список читателей с приблизительным временем прочтения (±батч-интервал)",
     responses=get_responses_description_by_codes([401, 403, 404])

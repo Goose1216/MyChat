@@ -60,10 +60,10 @@ export default function CreateChatScreen({ onChatCreated }: { onChatCreated: () 
     finally { setCreating(false); }
   };
 
-  const typeLabels: Record<string, { label: string; icon: string }> = {
-    private: { label: "Личный",  icon: "👤" },
-    group:   { label: "Группа",  icon: "👥" },
-    channel: { label: "Канал",   icon: "📢" },
+  const typeLabels: Record<string, { label: string; icon: string; hint: string }> = {
+    private: { label: "Личный",  icon: "💬", hint: "Только двое. Оба могут писать." },
+    group:   { label: "Группа",  icon: "👥", hint: "Несколько участников. Все могут писать." },
+    channel: { label: "Канал",   icon: "📢", hint: "Владелец пишет, остальные читают." },
   };
 
   return (
@@ -83,6 +83,11 @@ export default function CreateChatScreen({ onChatCreated }: { onChatCreated: () 
               <span>{typeLabels[t].label}</span>
             </button>
           ))}
+        </div>
+        {/* Подсказка о выбранном типе */}
+        <div style={{ fontSize: 11, color: "var(--c-ink-muted)", marginTop: -8, padding: "6px 10px",
+          background: "var(--c-surface)", borderRadius: "var(--r-md)", border: "1px solid var(--c-line)" }}>
+          {typeLabels[chatType].icon} <strong>{typeLabels[chatType].label}:</strong> {typeLabels[chatType].hint}
         </div>
       </div>
 

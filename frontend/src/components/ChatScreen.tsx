@@ -95,8 +95,8 @@ export default function ChatScreen({ userId, chat, onBack }) {
   const lastReadMessageIdRef  = useRef<number>(safeChat.last_read_message_id || 0);
   // Батчинг прочтений: храним from_id последнего отправленного батча
   const batchFromIdRef        = useRef<number>(safeChat.last_read_message_id || 0);
-  // Интервал отправки батча на сервер (3 минуты)
-  const BATCH_INTERVAL_MS     = 3 * 60 * 1000;
+  // Интервал отправки батча на сервер (1 минуты)
+  const BATCH_INTERVAL_MS     = 1 * 60 * 1000;
   // Ref на функцию отправки батча — чтобы setInterval всегда вызывал актуальную версию
   // (избегаем проблемы замыкания где интервал захватывает undefined из TDZ)
   const sendReadBatchRef      = useRef<(toId: number) => void>(() => {});
@@ -106,6 +106,8 @@ export default function ChatScreen({ userId, chat, onBack }) {
   // Кнопка "вниз": показывается когда пользователь не в самом низу
   const [isAtBottom, setIsAtBottom]     = useState(true);
   const [unreadCount, setUnreadCount]   = useState<number>(safeChat.cnt_unread_messages);
+  // Роль текущего пользователя в этом чате (нужна для канала)
+  const [myRole, setMyRole]             = useState<string>("member");
 
   const [profileUser, setProfileUser]   = useState<any | null>(null);
 
@@ -187,6 +189,13 @@ export default function ChatScreen({ userId, chat, onBack }) {
       const mRes  = await fetchWithAuth(`${API}/chats/${chat.id}/members`);
       const mData = await mRes.json();
       setMembers(mData.data || []);
+
+      // Загружаем свою роль (важно для канала — определяет право писать)
+      const roleRes = await fetchWithAuth(`${API}/chats/${chat.id}/my_role/`);
+      if (roleRes.ok) {
+        const roleData = await roleRes.json();
+        setMyRole((roleData.data ?? "member").toLowerCase());
+      }
     })();
   }, [chat.id]);
 
@@ -567,6 +576,12 @@ export default function ChatScreen({ userId, chat, onBack }) {
     return <div onDoubleClick={() => startEdit(m)} style={{ lineHeight: 1.5 }}>{m.text}</div>;
   };
 
+  // В канале писать могут только owner и admin; в остальных чатах — все
+  const isChannel = safeChat.chat_type === "channel";
+  const canWrite  = !isChannel || myRole === "owner" || myRole === "admin";
+  // Для управления участниками канала (смена ролей)
+  const isOwner   = myRole === "owner";
+
   return (
     <div style={s.page}>
       {/* HEADER */}
@@ -577,7 +592,12 @@ export default function ChatScreen({ userId, chat, onBack }) {
             <div style={s.chatAvatar}>{(chat.title || `#${chat.id}`).slice(0, 2).toUpperCase()}</div>
             <div>
               <div style={s.chatTitle}>{chat.title || `Чат #${chat.id}`}</div>
-              <div style={s.chatMeta}>{members.length} участн. · <span style={{ color: connected ? "var(--c-green)" : "var(--c-ink-ghost)" }}>{connected ? "онлайн" : "офлайн"}</span></div>
+              <div style={s.chatMeta}>
+                {safeChat.chat_type === "channel" && <span style={{ color: "var(--c-brand)", fontWeight: 700, marginRight: 4 }}>📢 Канал ·</span>}
+                {safeChat.chat_type === "group"   && <span style={{ color: "var(--c-green)",  fontWeight: 700, marginRight: 4 }}>👥 Группа ·</span>}
+                {safeChat.chat_type === "private" && <span style={{ color: "var(--c-ink-muted)", marginRight: 4 }}>💬</span>}
+                {members.length} участн. · <span style={{ color: connected ? "var(--c-green)" : "var(--c-ink-ghost)" }}>{connected ? "онлайн" : "офлайн"}</span>
+              </div>
             </div>
           </div>
         </div>
@@ -708,7 +728,14 @@ export default function ChatScreen({ userId, chat, onBack }) {
       )}
 
       {/* FOOTER */}
-      <footer style={s.footer}>
+      {/* Канал: показываем заглушку вместо поля ввода если нет прав */}
+      {isChannel && !canWrite && (
+        <div style={s.channelReadOnly}>
+          <span style={{ fontSize: 16 }}>📢</span>
+          <span>Вы читатель этого канала — отправка сообщений недоступна</span>
+        </div>
+      )}
+      <footer style={{ ...s.footer, display: isChannel && !canWrite ? "none" : undefined }}>
         {/* Typing indicator */}
         {typingIds.length > 0 && (
           <div style={s.typing}>
@@ -1181,6 +1208,12 @@ const s: Record<string, React.CSSProperties> = {
     display: "flex", alignItems: "center", justifyContent: "center",
     fontSize: 16, cursor: "pointer", background: "var(--c-surface)", flexShrink: 0,
     transition: "background var(--t-fast)",
+  },
+  channelReadOnly: {
+    display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
+    padding: "10px 16px",
+    background: "var(--c-surface)", borderTop: "1px solid var(--c-line)",
+    fontSize: 12, color: "var(--c-ink-muted)", fontStyle: "italic",
   },
 
   // Кнопка прокрутки вниз

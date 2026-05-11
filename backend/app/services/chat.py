@@ -1,4 +1,3 @@
-from datetime import datetime, timezone
 import logging
 from sqlalchemy.exc import IntegrityError
 
@@ -59,7 +58,9 @@ class ChatService:
 
                 chat_participant2 = await uow.chat_participant.add_one({"user_id": user2_id, "chat_id": chat_id})
 
-            chat_participant1 = await uow.chat_participant.add_one({"user_id": user_id, "chat_id": chat_id})
+            # Создатель группы/канала получает роль OWNER
+            owner_role = "owner" if chat_for_return.chat_type != ChatType.PRIVATE else "member"
+            chat_participant1 = await uow.chat_participant.add_one({"user_id": user_id, "chat_id": chat_id, "role": owner_role})
             await uow.commit()
             return chat_for_return
 
@@ -99,7 +100,71 @@ class ChatService:
         async with self.uow as uow:
             return await uow.chat.get_one_by(**kwargs)
 
-    async def check_user_in_chat(self, chat_id: int, user_id: int):
+    async def create_read_batch(
+            self,
+            user_id: int,
+            chat_id: int,
+            from_id: int,
+            to_id: int,
+    ) -> None:
+        """
+        Сохраняет батч прочтения: пользователь user_id прочитал сообщения
+        [from_id, to_id] в чате chat_id примерно в момент вызова.
+        Также обновляет last_read_message_id если to_id больше текущего.
+        """
+        async with self.uow as uow:
+            # Записываем батч
+            await uow.message_read_batch.create_batch(
+                user_id=user_id,
+                chat_id=chat_id,
+                from_id=from_id,
+                to_id=to_id,
+            )
+            # Синхронно обновляем last_read_message_id если надо
+            participant = await uow.chat_participant.get_one_by(
+                chat_id=chat_id, user_id=user_id
+            )
+            if participant and to_id > participant.last_read_message_id:
+                participant.last_read_message_id = to_id
+            await uow.commit()
+
+    async def get_message_readers(
+            self,
+            message_id: int,
+            requester_id: int,
+    ) -> list[dict]:
+        """
+        Возвращает список читателей сообщения message_id с временем прочтения.
+        Исключает автора сообщения (sender_id) — он сам знает что написал.
+        Включает текущего пользователя (requester_id) если он прочитал.
+        Время — приблизительное (с погрешностью до интервала батчинга на фронте).
+        """
+        async with self.uow as uow:
+            message = await uow.message.get_one(pk=message_id)
+            if not message:
+                raise UnfoundEntity(detail="Сообщение не найдено")
+
+            # Исключаем автора сообщения, а не того кто запрашивает
+            sender_id = message.sender_id
+
+            rows = await uow.message_read_batch.get_readers_for_message(
+                chat_id=message.chat_id,
+                message_id=message_id,
+                exclude_user_id=sender_id,
+            )
+
+            result = []
+            for row in rows:
+                user = await uow.user.get_one(pk=row.user_id)
+                result.append({
+                    "user_id": row.user_id,
+                    "username": user.username if user else None,
+                    "email": user.email if user else None,
+                    "read_at": row.read_at,
+                })
+            return result
+
+    async def check_user_in_chat(self, chat_id: int, user_id: int, return_role:bool=False):
         async with self.uow as uow:
             chat = await uow.chat.get_one(pk=chat_id)
             if not chat:
@@ -109,7 +174,11 @@ class ChatService:
             if not user:
                 raise UnfoundEntity(detail="Такого пользователя нет")
 
-            return await uow.chat_participant.get_one_by(chat_id=chat_id, user_id=user_id)
+            participant = await uow.chat_participant.get_one_by(chat_id=chat_id, user_id=user_id)
+            if return_role:
+                return str(participant.role.value if hasattr(participant.role, "value") else participant.role)
+            else:
+                return participant
 
     async def _get_chat(self, chat_id: int, user_id: int, uow):
         """
@@ -232,32 +301,16 @@ class ChatService:
             users_for_return = [UserSchemaFromBd.model_validate(user) for user in users]
             return users_for_return
 
-    async def create_read_batch(
-        self,
-        user_id: int,
-        chat_id: int,
-        from_id: int,
-        to_id: int,
-    ) -> None:
+    async def change_member_role(self, chat_id: int, user_id: int, role: str) -> None:
         """
-        Сохраняет батч прочтения: пользователь user_id прочитал сообщения
-        [from_id, to_id] в чате chat_id примерно в момент вызова.
-        Также обновляет last_read_message_id если to_id больше текущего.
+        Меняет роль участника в чате.
+        role: "member" | "admin"  (owner нельзя назначить через этот метод)
         """
         async with self.uow as uow:
-            # Записываем батч
-            await uow.message_read_batch.create_batch(
-                user_id=user_id,
-                chat_id=chat_id,
-                from_id=from_id,
-                to_id=to_id,
-            )
-            # Синхронно обновляем last_read_message_id если надо
-            participant = await uow.chat_participant.get_one_by(
-                chat_id=chat_id, user_id=user_id
-            )
-            if participant and to_id > participant.last_read_message_id:
-                participant.last_read_message_id = to_id
+            participant = await uow.chat_participant.get_one_by(chat_id=chat_id, user_id=user_id)
+            if not participant:
+                raise UnfoundEntity(detail="Участник не найден в этом чате")
+            participant.role = role.lower()
             await uow.commit()
 
     async def get_message_readers(
