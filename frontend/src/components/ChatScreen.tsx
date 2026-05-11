@@ -552,32 +552,160 @@ export default function ChatScreen({ userId, chat, onBack }) {
   // Закрываем контекстное меню по клику в любом месте
   const closeCtxMenu = () => setCtxMenu(null);
 
+  const isImageFile = (file?: any) => {
+  if (!file?.filename) return false;
+
+  const ext = file.filename.split(".").pop()?.toLowerCase();
+
+  return [
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "webp",
+  ].includes(ext || "");
+};
+  const [previewImage, setPreviewImage] = useState<string | null>(null);
+
   const renderMessageContent = (m: Message) => {
-    if (m.is_deleted) return <span style={{ fontStyle: "italic", color: "var(--c-ink-ghost)" }}>Сообщение удалено</span>;
-    if (m.file) return (
-      <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-        <span style={{ fontSize: 13, fontWeight: 600 }}>📎 {m.file.filename}</span>
-        <a href={m.file.url} target="_blank" rel="noopener noreferrer"
-          style={{ fontSize: 11, color: m.is_self ? "rgba(255,255,255,0.8)" : "var(--c-brand)", textDecoration: "underline" }}>
+    if (m.is_deleted) {
+      return (
+        <span style={{ fontStyle: "italic", color: "var(--c-ink-ghost)" }}>
+          Сообщение удалено
+        </span>
+      );
+    }
+
+    if (m.file) {
+      // IMAGE
+      if (isImageFile(m.file)) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+      <img
+        src={m.file.url}
+        alt={m.file.filename}
+        loading="lazy"
+        onClick={() => setPreviewImage(m.file.url)}
+        style={{
+          maxWidth: 320,
+          maxHeight: 260,
+          borderRadius: 12,
+          cursor: "pointer",
+          objectFit: "cover",
+          border: "1px solid rgba(255,255,255,0.08)",
+        }}
+      />
+
+      <div
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 8,
+        }}
+      >
+        <span
+          style={{
+            fontSize: 11,
+            opacity: 0.7,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          🖼 {m.file.filename}
+        </span>
+
+        <a
+          href={m.file.url}
+          download={m.file.filename}
+          target="_blank"
+          rel="noopener noreferrer"
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: m.is_self
+              ? "rgba(255,255,255,0.9)"
+              : "var(--c-brand)",
+            textDecoration: "none",
+            flexShrink: 0,
+          }}
+        >
           Скачать
         </a>
       </div>
+    </div>
+  );
+}
+
+      // DEFAULT FILE
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+          <span style={{ fontSize: 13, fontWeight: 600 }}>
+            📎 {m.file.filename}
+          </span>
+
+          <a
+            href={m.file.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              fontSize: 11,
+              color: m.is_self
+                ? "rgba(255,255,255,0.8)"
+                : "var(--c-brand)",
+              textDecoration: "underline",
+            }}
+          >
+            Скачать
+          </a>
+        </div>
+      );
+    }
+
+    if (editingId === m.id) {
+      return (
+        <input
+          style={{
+            background: "rgba(255,255,255,0.2)",
+            border: "1px solid rgba(255,255,255,0.4)",
+            borderRadius: 6,
+            padding: "3px 8px",
+            color: "#fff",
+            fontSize: 13,
+            outline: "none",
+            minWidth: 160,
+          }}
+          value={editingText}
+          autoFocus
+          onChange={e => setEditingText(e.target.value)}
+          onKeyDown={e => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              saveEdit();
+            }
+
+            if (e.key === "Escape") {
+              setEditingId(null);
+              setEditingText("");
+            }
+          }}
+          onBlur={() => {
+            setEditingId(null);
+            setEditingText("");
+          }}
+        />
+      );
+    }
+
+    return (
+      <div
+        onDoubleClick={() => startEdit(m)}
+        style={{ lineHeight: 1.5 }}
+      >
+        {m.text}
+      </div>
     );
-    if (editingId === m.id) return (
-      <input style={{
-        background: "rgba(255,255,255,0.2)", border: "1px solid rgba(255,255,255,0.4)",
-        borderRadius: 6, padding: "3px 8px", color: "#fff", fontSize: 13, outline: "none", minWidth: 160,
-      }}
-        value={editingText} autoFocus
-        onChange={e => setEditingText(e.target.value)}
-        onKeyDown={e => {
-          if (e.key === "Enter") { e.preventDefault(); saveEdit(); }
-          if (e.key === "Escape") { setEditingId(null); setEditingText(""); }
-        }}
-        onBlur={() => { setEditingId(null); setEditingText(""); }}
-      />
-    );
-    return <div onDoubleClick={() => startEdit(m)} style={{ lineHeight: 1.5 }}>{m.text}</div>;
   };
 
   // В канале писать могут только owner и admin; в остальных чатах — все
@@ -669,6 +797,67 @@ export default function ChatScreen({ userId, chat, onBack }) {
                     {safeName(m.sender)}
                   </div>
                 )}
+
+                {/* ── IMAGE PREVIEW MODAL ── */}
+
+    {previewImage && (
+
+      <div
+
+        onClick={() => setPreviewImage(null)}
+
+        style={{
+
+          position: "fixed",
+
+          inset: 0,
+
+          background: "rgba(0,0,0,0.88)",
+
+          display: "flex",
+
+          alignItems: "center",
+
+          justifyContent: "center",
+
+          zIndex: 9999,
+
+          cursor: "zoom-out",
+
+          padding: 24,
+
+        }}
+
+      >
+
+        <img
+
+          src={previewImage}
+
+          alt="preview"
+
+          onClick={e => e.stopPropagation()}
+
+          style={{
+
+            maxWidth: "95vw",
+
+            maxHeight: "95vh",
+
+            borderRadius: 16,
+
+            objectFit: "contain",
+
+            boxShadow: "0 20px 60px rgba(0,0,0,0.5)",
+
+          }}
+
+        />
+
+      </div>
+
+    )}
+
                 <div style={{
                   padding: "9px 13px",
                   borderRadius: m.is_self ? "16px 16px 4px 16px" : "16px 16px 16px 4px",
