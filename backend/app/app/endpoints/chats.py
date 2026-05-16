@@ -5,11 +5,12 @@ from typing import Dict, Set, List
 
 from app.services import ChatService, MessageService, UserService
 from app.app import schemas
+from app.app.schemas.chats import MemberWithRoleSchema, ChangeRoleSchema
 from app.app.schemas.chats import (ChatCreateSchema, ChatSchemaFromBd, ChatParticipantSchema,
                                    ChatCreateSchemaForEndpoint, ChatParticipantSchemaForAddUser)
 from app.utils.unit_of_work import UnitOfWork, IUnitOfWork
 from app.security import security
-from app.db.models import ChatType, UserRole
+from app.db.models import ChatType
 from app.app.schemas.response import Response
 from app.utils.response import get_responses_description_by_codes
 from app.utils import manager, get_unit_of_work
@@ -82,7 +83,6 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket, user_id)
 
-
 @chats.get(
     '/',
     response_model=schemas.Response[List[schemas.ChatSchemaFromBdWithLastMessage]],
@@ -115,7 +115,6 @@ async def get_all_members_for_chat(
     members = await chat_service.get_members_for_member(chat_id=chat_id, member_id=int(access_token.get("user_id")))
     return schemas.Response(data=members)
 
-
 @chats.get(
     "/{chat_id}/messages/",
     response_model=schemas.Response[List[schemas.MessageFromDbSchema]],
@@ -137,7 +136,7 @@ async def get_all_messages_for_chat(
     "/{chat_id}/my_role/",
     response_model=schemas.Response[str],
     name="Получить свою роль в чате",
-    responses=get_responses_description_by_codes([401, 403, 404])
+    responses=get_responses_description_by_codes([401, 404])
 )
 async def get_my_role(
     chat_id: int,
@@ -146,65 +145,49 @@ async def get_my_role(
 ):
     user_id = int(access_token.get("user_id"))
     chat_service = ChatService(uow)
-    participant = await chat_service.check_user_in_chat(chat_id, user_id, return_role=True)
-    if not participant:
-        raise HTTPException(status_code=404, detail="Вы не состоите в этом чате")
-    return schemas.Response(data=participant)
+    role = await chat_service.get_my_role(chat_id=chat_id, user_id=user_id)
+    return schemas.Response(data=role)
+
+
+@chats.get(
+    "/{chat_id}/members_with_roles/",
+    response_model=schemas.Response[List[MemberWithRoleSchema]],
+    name="Участники с ролями",
+    description="Только для канала. Возвращает участников вместе с их ролями.",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def get_members_with_roles(
+    chat_id: int,
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_id = int(access_token.get("user_id"))
+    chat_service = ChatService(uow)
+    members = await chat_service.get_members_with_roles(chat_id=chat_id, requester_id=user_id)
+    return schemas.Response(data=members)
 
 
 @chats.patch(
     "/{chat_id}/members/{member_id}/role/",
     response_model=schemas.Response[None],
-    name="Изменить роль участника",
-    description="Только OWNER может менять роли. Для канала: ADMIN = право писать, MEMBER = только читать.",
+    name="Изменить роль участника канала",
+    description="Только OWNER. admin = право писать и создавать задачи, member = только читать.",
     responses=get_responses_description_by_codes([401, 403, 404])
 )
 async def change_member_role(
     chat_id: int,
     member_id: int,
-    role: str,
+    data: ChangeRoleSchema,
     access_token=Depends(security.decode_jwt_access),
     uow: IUnitOfWork = Depends(get_unit_of_work),
 ):
     user_id = int(access_token.get("user_id"))
     chat_service = ChatService(uow)
-
-    # Проверяем что текущий пользователь — OWNER
-    my_participant = await chat_service.check_user_in_chat(chat_id, user_id)
-    if not my_participant:
-        raise HTTPException(status_code=403, detail="Вы не состоите в этом чате")
-    my_role = str(my_participant.role.value if hasattr(my_participant.role, "value") else my_participant.role).upper()
-    if my_role != "OWNER":
-        raise HTTPException(status_code=403, detail="Только владелец может менять роли участников")
-
-    # Меняем роль
-    role_upper = role.upper()
-    if role_upper not in ("MEMBER", "ADMIN"):
-        raise HTTPException(status_code=400, detail="Допустимые роли: MEMBER, ADMIN")
-
-    await chat_service.change_member_role(chat_id=chat_id, user_id=member_id, role=role_upper)
-    return schemas.Response(data=None)
-
-
-@chats.post(
-    "/messages/read_batch/",
-    response_model=schemas.Response[None],
-    name="Записать батч прочтения",
-    description="Фронт вызывает раз в N минут, передавая диапазон прочитанных сообщений",
-    responses=get_responses_description_by_codes([401, 403, 404])
-)
-async def create_read_batch(
-    data: schemas.ReadBatchCreateSchema,
-    access_token=Depends(security.decode_jwt_access),
-    uow: IUnitOfWork = Depends(get_unit_of_work),
-):
-    user_id = int(access_token.get("user_id"))
-    chat_service = ChatService(uow)
-    await chat_service.create_read_batch(
-        user_id=user_id,
-        chat_id=data.chat_id,
-        from_id=data.from_id,
-        to_id=data.to_id,
+    await chat_service.change_member_role(
+        chat_id=chat_id,
+        target_user_id=member_id,
+        new_role=data.role,
+        requester_id=user_id,
     )
     return schemas.Response(data=None)
 
@@ -260,25 +243,55 @@ async def user_typing(
     responses=get_responses_description_by_codes([401, 403, 404])
 )
 async def add_user_in_chat(
-                            info_for_add_user: ChatParticipantSchemaForAddUser,
-                            access_token = Depends(security.decode_jwt_access),
-                            uow: IUnitOfWork = Depends(get_unit_of_work)
-                            ):
+        info_for_add_user: ChatParticipantSchemaForAddUser,
+        access_token=Depends(security.decode_jwt_access),
+        uow: IUnitOfWork = Depends(get_unit_of_work)
+):
     chat_service = ChatService(uow)
     user_who_add = access_token.get("user_id")
     await chat_service.add_user_in_chat(user_who_add, info_for_add_user)
     chat_id = info_for_add_user.chat_id
+    added_user_id = info_for_add_user.user_id
 
     user_service = UserService(uow)
-    user_whoose_add = await user_service.get_by_id(info_for_add_user.user_id)
+    user_whoose_add = await user_service.get_by_id(added_user_id)
 
     message_service = MessageService(uow)
     text = f"Пользователь {user_whoose_add.username} подключился к чату"
     message = await message_service.create_message(chat_id=chat_id, data=text)
     members_chat = await chat_service.get_members(chat_id, return_id=True)
+
+    # Уведомляем всех текущих участников о новом сообщении
     await manager.broadcast(type_of_message=0, message=text, chat_id=chat_id, receivers_id=members_chat,
                             message_id=message.id, sender_id=None, created_at=message.created_at.isoformat(),
                             updated_at=message.updated_at.isoformat(), sender=None)
+
+    # Отправляем новому участнику WS-сообщение типа 5 — «тебя добавили в чат».
+    # Фронт получит его и добавит чат в список без перезагрузки страницы.
+    # Передаём полный объект чата в том же формате что и GET /chats.
+    try:
+        chat_data = await chat_service.get_chat_for_user(
+            chat_id=chat_id, user_id=added_user_id
+        )
+        if chat_data:
+            import json as _json
+            chat_dict = chat_data.model_dump() if hasattr(chat_data, "model_dump") else dict(chat_data)
+
+            # Конвертируем datetime в строки для JSON
+            def _serialize(obj):
+                if hasattr(obj, "isoformat"):
+                    return obj.isoformat()
+                return str(obj)
+
+            await manager.broadcast(
+                type_of_message=5,
+                message="",
+                chat_id=chat_id,
+                receivers_id=[added_user_id],
+                chat=_json.loads(_json.dumps(chat_dict, default=_serialize)),
+            )
+    except Exception as e:
+        logger.warning(f"Не удалось отправить WS уведомление о добавлении в чат: {e}")
 
     return schemas.Response(data=None)
 

@@ -79,18 +79,7 @@ export default function ChatsListScreen({
     setLoading(true);
     try {
       const res = await fetchWithAuth(`${import.meta.env.VITE_API_URL}/chats`, { method: "GET" });
-      if (res.ok) {
-        const d = await res.json();
-        // Нормализуем: гарантируем наличие полей которые могут отсутствовать
-        // в старых данных (до миграции бэкенда)
-        const normalized = (d.data ?? []).map((c: any) => ({
-          ...c,
-          max_other_read_id:   c.max_other_read_id   ?? 0,
-          cnt_unread_messages: c.cnt_unread_messages  ?? 0,
-          last_read_message_id: c.last_read_message_id ?? 0,
-        }));
-        setChats(normalized);
-      }
+      if (res.ok) { const d = await res.json(); setChats(d.data ?? []); }
       else if (res.status === 401) { alert("Сессия истекла."); onLogout(); }
     } catch { }
     finally { setLoading(false); }
@@ -155,12 +144,33 @@ export default function ChatsListScreen({
 
   useEffect(() => { addHandler(updateChatLastMessage); return () => removeHandler(updateChatLastMessage); }, []);
 
+  // type_of_message=5: нас добавили в новый чат — добавляем его в список без перезагрузки
+  const handleChatAdded = (wsMsg: any) => {
+    if (wsMsg.type_of_message !== 5) return;
+    const newChat = wsMsg.chat;
+    if (!newChat) return;
+
+    setChats(prev => {
+      // Не дублируем если чат уже есть
+      if (prev.some(c => c.id === newChat.id)) return prev;
+      // Нормализуем поля на случай если они отсутствуют
+      const normalized = {
+        ...newChat,
+        max_other_read_id:    newChat.max_other_read_id    ?? 0,
+        cnt_unread_messages:  newChat.cnt_unread_messages   ?? 0,
+        last_read_message_id: newChat.last_read_message_id  ?? 0,
+      };
+      // Новый чат — в начало списка
+      return [normalized, ...prev];
+    });
+  };
+  useEffect(() => { addHandler(handleChatAdded); return () => removeHandler(handleChatAdded); }, []);
+
   const handleChatCreated = () => { setShowCreateChat(false); fetchChats(); };
 
   const getAvClass   = (id: number) => AVATAR_CLASSES[id % AVATAR_CLASSES.length];
   const getInitials  = (chat: any) => (chat.title || `#${chat.id}`).slice(0, 2).toUpperCase();
-  // Количество чатов где есть непрочитанные (а не сумма сообщений)
-  const totalUnread  = chats.filter(c => (c.cnt_unread_messages ?? 0) > 0).length;
+  const totalUnread  = chats.reduce((n, c) => n + (c.cnt_unread_messages ?? 0), 0);
 
   const filtered = search.trim()
     ? chats.filter(c => (c.title || `Чат #${c.id}`).toLowerCase().includes(search.toLowerCase()))
@@ -254,9 +264,9 @@ export default function ChatsListScreen({
                     {chat.cnt_unread_messages > 0 && (
                       <span style={s.unread}>{chat.cnt_unread_messages > 99 ? "99+" : chat.cnt_unread_messages}</span>
                     )}
-                    {chat.chat_type === "channel" && <span title="Канал"   style={s.typeIcon}>📢</span>}
-                    {chat.chat_type === "group"   && <span title="Группа"  style={s.typeIcon}>👥</span>}
-                    {chat.chat_type === "private" && <span title="Личный"  style={s.typeIcon}>💬</span>}
+                    {chat.chat_type && (
+                      <span style={s.typePill}>{chat.chat_type.toUpperCase()}</span>
+                    )}
                   </div>
                 </div>
               );
@@ -350,5 +360,5 @@ const s: Record<string, React.CSSProperties> = {
   unread:      { background: "var(--c-brand)", color: "#fff", borderRadius: "var(--r-full)",
                  fontSize: 10, fontWeight: 700, padding: "1px 7px",
                  fontFamily: "var(--font-mono)", minWidth: 20, textAlign: "center" as const },
-  typeIcon:    { fontSize: 13, opacity: 0.6 },
+  typePill:    { fontSize: 9, color: "var(--c-ink-ghost)", fontFamily: "var(--font-mono)", fontWeight: 600 },
 };

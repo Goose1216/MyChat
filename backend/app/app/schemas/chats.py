@@ -72,8 +72,19 @@ class ReadBatchCreateSchema(BaseModel):
 
 
 class MessageReaderSchema(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-    user_id:  int
-    username: str | None = None
+    user_id: int
     email:    str | None = None
     read_at:  datetime | None = None
+
+
+class MemberWithRoleSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    username: str | None = None
+    email: str | None = None
+    role: str  # member / admin / owner
+
+
+class ChangeRoleSchema(BaseModel):
+    role: str  # "member" | "admin"  (нельзя передать "owner")
