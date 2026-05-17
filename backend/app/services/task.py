@@ -1,6 +1,9 @@
 import logging
 from uuid import UUID
 
+from sqlalchemy import select
+from sqlalchemy.orm import selectinload
+
 from app.utils.unit_of_work import IUnitOfWork
 from app.db.models import Task, TaskAssignment
 from app.app.schemas.task import (
@@ -83,8 +86,16 @@ class TaskService:
                     }
                 )
             await uow.session.flush()
-
-            await uow.session.refresh(task_created, ["assignments"])
+            stmt = (
+                select(Task)
+                .options(
+                    selectinload(Task.assignments)
+                    .selectinload(TaskAssignment.user)
+                )
+                .where(Task.id == task_created.id)
+            )
+            result = await uow.session.execute(stmt)
+            task_created = result.scalar_one()
             task_for_return = TaskFromDbSchema.model_validate(task_created)
             await uow.commit()
 
@@ -109,9 +120,18 @@ class TaskService:
             await uow.task.update(pk=task_id, data=update_data)
 
             await uow.commit()
-            task_new = await uow.task.get_one(pk=task_id)
+            stmt = (
+                select(Task)
+                .options(
+                    selectinload(Task.assignments)
+                    .selectinload(TaskAssignment.user)
+                )
+                .where(Task.id == task_id)
+            )
+            result = await uow.session.execute(stmt)
+            task_created = result.scalar_one()
 
-            return TaskFromDbSchema.model_validate(task_new)
+            return TaskFromDbSchema.model_validate(task_created)
 
     async def delete_task(self, task_id: UUID) -> None:
         async with self.uow as uow:
