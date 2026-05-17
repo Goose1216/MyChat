@@ -58,7 +58,9 @@ class ChatService:
 
                 chat_participant2 = await uow.chat_participant.add_one({"user_id": user2_id, "chat_id": chat_id})
 
-            chat_participant1 = await uow.chat_participant.add_one({"user_id": user_id, "chat_id": chat_id})
+            owner_role = "owner" if chat_for_return.chat_type == ChatType.CHANNEL else "member"
+            chat_participant1 = await uow.chat_participant.add_one(
+                {"user_id": user_id, "chat_id": chat_id, "role": owner_role})
             await uow.commit()
             return chat_for_return
 
@@ -173,7 +175,7 @@ class ChatService:
                 raise UnfoundEntity(detail="Такого пользователя нет")
 
             participant = await uow.chat_participant.get_one_by(chat_id=chat_id, user_id=user_id)
-            if return_role:
+            if return_role and participant is not None:
                 return str(participant.role.value if hasattr(participant.role, "value") else participant.role)
             else:
                 return participant
@@ -305,7 +307,7 @@ class ChatService:
         if not participant:
             raise InaccessibleEntity(detail="Вы не состоите в этом чате")
         async with self.uow as uow:
-            chat_participants = await uow.chat_participant.get_all_by(chat_id=chat_id)
+            chat_participants = await uow.chat_participant.get_many_by(chat_id=chat_id)
             result = []
             for cp in chat_participants:
                 user = await uow.user.get_one(pk=cp.user_id)
@@ -331,11 +333,10 @@ class ChatService:
         Меняет роль участника. Только OWNER может менять роли.
         new_role: "member" | "admin"
         """
-        my_participant = await self.check_user_in_chat(chat_id=chat_id, user_id=requester_id)
-        if not my_participant:
+        my_role = await self.check_user_in_chat(chat_id=chat_id, user_id=requester_id, return_role=True)
+        if not my_role:
             raise InaccessibleEntity(detail="Вы не состоите в этом чате")
 
-        my_role = my_participant.role.value if hasattr(my_participant.role, "value") else str(my_participant.role)
         if my_role.lower() != "owner":
             raise InaccessibleEntity(detail="Только владелец канала может менять роли участников")
 

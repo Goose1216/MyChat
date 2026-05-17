@@ -68,6 +68,14 @@ class Repository(ABC):
         res = await self.session.execute(stmt)
         return res.scalar_one_or_none()
 
+    async def get_many_by(self, **kwargs):
+        stmt = select(self.model)
+        for field, value in kwargs.items():
+            column = getattr(self.model, field)
+            stmt = stmt.filter(column == value)
+        res = await self.session.execute(stmt)
+        return res.scalars().all()
+
     async def get_by(self, **kwargs):
         stmt = select(self.model)
         for field, value in kwargs.items():

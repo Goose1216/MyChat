@@ -212,6 +212,7 @@ async def get_message_readers(
     )
     return schemas.Response(data=readers)
 
+
 @chats.post(
     "/{chat_id}/{user_id}/typing/",
     response_model=schemas.Response[None],
