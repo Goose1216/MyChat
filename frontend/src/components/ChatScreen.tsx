@@ -92,6 +92,10 @@ export default function ChatScreen({ userId, chat, onBack }) {
 
   const [profileUser, setProfileUser] = useState<any | null>(null);
 
+  // Попап со всеми участниками (по клику на аватары в шапке)
+  const [membersPopupOpen, setMembersPopupOpen] = useState(false);
+  const [membersSearch, setMembersSearch]       = useState("");
+
   // Контекстное меню
   const [ctxMenu, setCtxMenu] = useState<{
     x: number; y: number; messageId: number; isSelf: boolean; senderId: number; isDeleted: boolean;
@@ -181,6 +185,15 @@ export default function ChatScreen({ userId, chat, onBack }) {
         setMyRole((roleData.data ?? "member").toLowerCase());
       } else {
         setMyRole("member");
+      }
+
+      // Для канала грузим роли всех участников сразу (для отображения)
+      if (chat.chat_type === "channel") {
+        const rolesRes = await fetchWithAuth(`${API}/chats/${chat.id}/members_with_roles/`);
+        if (rolesRes.ok) {
+          const rolesData = await rolesRes.json();
+          setMembersWithRoles(rolesData.data ?? []);
+        }
       }
     })();
   }, [chat.id]);
@@ -627,18 +640,127 @@ export default function ChatScreen({ userId, chat, onBack }) {
         </div>
 
         <div style={s.headerRight}>
-          <div style={{ display: "flex", gap: 2 }}>
-            {members.slice(0, 4).map(u => (
-              <button key={u.id} onClick={() => setProfileUser(u)}
-                className={`avatar avatar-sm ${avatarColor(u.id)}`}
-                style={{ cursor: "pointer", border: "2px solid var(--c-paper)" }} title={safeName(u)}>
-                {safeName(u)[0].toUpperCase()}
-              </button>
-            ))}
-            {members.length > 4 && (
-              <div className="avatar avatar-sm" style={{ background: "var(--c-surface)", color: "var(--c-ink-muted)", border: "2px solid var(--c-paper)", fontSize: 9 }}>
-                +{members.length - 4}
-              </div>
+          {/* Аватары — клик открывает попап со всеми участниками */}
+          <div style={{ position: "relative" as const }}>
+            <button
+              onClick={() => { setMembersPopupOpen(p => !p); setMembersSearch(""); }}
+              style={{ display: "flex", gap: 2, alignItems: "center", background: "none", border: "none", cursor: "pointer", padding: "2px 4px", borderRadius: "var(--r-md)" }}
+              title="Показать всех участников">
+              {members.slice(0, 4).map(u => {
+                const memberRole = isChannel
+                  ? membersWithRoles.find(mr => mr.id === u.id)?.role
+                  : null;
+                const roleEmoji: Record<string, string> = { owner: "👑", admin: "✏️", member: "👁" };
+                return (
+                  <div key={u.id}
+                    className={`avatar avatar-sm ${avatarColor(u.id)}`}
+                    style={{ border: "2px solid var(--c-paper)", position: "relative" as const, pointerEvents: "none" }}>
+                    {safeName(u)[0].toUpperCase()}
+                    {isChannel && memberRole && memberRole !== "member" && (
+                      <span style={{ position: "absolute", bottom: -4, right: -4, fontSize: 9, lineHeight: 1 }}>
+                        {roleEmoji[memberRole]}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+              {members.length > 4 && (
+                <div className="avatar avatar-sm" style={{ background: "var(--c-surface)", color: "var(--c-ink-muted)", border: "2px solid var(--c-paper)", fontSize: 9 }}>
+                  +{members.length - 4}
+                </div>
+              )}
+            </button>
+
+            {/* ── Members popup ── */}
+            {membersPopupOpen && (
+              <>
+                <div style={{ position: "fixed", inset: 0, zIndex: 199 }} onClick={() => setMembersPopupOpen(false)} />
+                <div style={{
+                  position: "absolute", top: "calc(100% + 8px)", right: 0,
+                  width: 280, maxHeight: 420,
+                  background: "var(--c-paper)", border: "1px solid var(--c-line)",
+                  borderRadius: "var(--r-lg)", boxShadow: "var(--shadow-md)",
+                  zIndex: 200, display: "flex", flexDirection: "column", overflow: "hidden",
+                  animation: "modalIn 120ms ease",
+                }}>
+                  {/* Заголовок попапа */}
+                  <div style={{ padding: "12px 14px 8px", borderBottom: "1px solid var(--c-line-soft)", flexShrink: 0 }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: "var(--c-ink)" }}>
+                        Участники <span style={{ color: "var(--c-ink-muted)", fontWeight: 400 }}>({members.length})</span>
+                      </span>
+                      <button onClick={() => setMembersPopupOpen(false)}
+                        style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, color: "var(--c-ink-muted)", lineHeight: 1, padding: 2 }}>✕</button>
+                    </div>
+                    {/* Поиск */}
+                    <input
+                      value={membersSearch}
+                      onChange={e => setMembersSearch(e.target.value)}
+                      placeholder="Поиск по имени…"
+                      autoFocus
+                      className="input"
+                      style={{ height: 32, fontSize: 12, padding: "0 10px", borderRadius: "var(--r-full)" }}
+                    />
+                  </div>
+
+                  {/* Список участников */}
+                  <div style={{ overflowY: "auto", flex: 1, padding: "4px 0" }}>
+                    {(() => {
+                      const roleEmoji: Record<string, string> = { owner: "👑", admin: "✏️", member: "👁" };
+                      const roleLabel: Record<string, string> = { owner: "Владелец", admin: "Редактор", member: "Читатель" };
+                      const query = membersSearch.toLowerCase();
+                      const filtered = members.filter(u =>
+                        !query || safeName(u).toLowerCase().includes(query) || (u.email || "").toLowerCase().includes(query)
+                      );
+                      if (filtered.length === 0) return (
+                        <div style={{ textAlign: "center", padding: "20px 0", color: "var(--c-ink-muted)", fontSize: 12 }}>Никого не найдено</div>
+                      );
+                      return filtered.map((u, i) => {
+                        const isMe = u.id === userId;
+                        const memberRole = isChannel
+                          ? membersWithRoles.find(mr => mr.id === u.id)?.role
+                          : null;
+                        return (
+                          <button key={u.id}
+                            onClick={() => { setProfileUser({ ...u, role: memberRole }); setMembersPopupOpen(false); }}
+                            style={{
+                              display: "flex", alignItems: "center", gap: 10,
+                              width: "100%", padding: "8px 14px",
+                              background: isMe ? "var(--c-brand-bg)" : "transparent",
+                              border: "none", cursor: "pointer", textAlign: "left" as const,
+                              borderBottom: i < filtered.length - 1 ? "1px solid var(--c-line-soft)" : "none",
+                              transition: "background var(--t-fast)",
+                            }}
+                            className="member-row">
+                            <div className={`avatar avatar-sm ${avatarColor(u.id)}`}
+                              style={{ flexShrink: 0, position: "relative" as const }}>
+                              {safeName(u)[0].toUpperCase()}
+                              {isChannel && memberRole && memberRole !== "member" && (
+                                <span style={{ position: "absolute", bottom: -3, right: -3, fontSize: 8, lineHeight: 1 }}>
+                                  {roleEmoji[memberRole]}
+                                </span>
+                              )}
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 13, fontWeight: isMe ? 700 : 500, color: isMe ? "var(--c-brand)" : "var(--c-ink)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                                {safeName(u)}{isMe && <span style={{ fontSize: 10, fontWeight: 400, color: "var(--c-ink-muted)", marginLeft: 6 }}>это вы</span>}
+                              </div>
+                              {isChannel && memberRole && (
+                                <div style={{ fontSize: 10, color: "var(--c-ink-ghost)", marginTop: 1 }}>
+                                  {roleEmoji[memberRole]} {roleLabel[memberRole]}
+                                </div>
+                              )}
+                              {!isChannel && u.email && (
+                                <div style={{ fontSize: 10, color: "var(--c-ink-ghost)", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.email}</div>
+                              )}
+                            </div>
+                          </button>
+                        );
+                      });
+                    })()}
+                  </div>
+                </div>
+              </>
             )}
           </div>
           <button className="btn" style={{ fontSize: 12 }} onClick={() => { setTasksModalOpen(true); loadTasks(); }}>📋 Задачи</button>
@@ -655,6 +777,44 @@ export default function ChatScreen({ userId, chat, onBack }) {
           <button className="btn btn-danger" style={{ fontSize: 12 }} onClick={leaveChat}>Выйти</button>
         </div>
       </header>
+
+      {/* ── Полоса участников с ролями (только для каналов) ── */}
+      {isChannel && membersWithRoles.length > 0 && (
+        <div style={{
+          display: "flex", alignItems: "center", gap: 6, padding: "6px 16px",
+          background: "var(--c-paper)", borderBottom: "1px solid var(--c-line-soft)",
+          overflowX: "auto", flexShrink: 0, flexWrap: "nowrap",
+        }}>
+          <span style={{ fontSize: 10, color: "var(--c-ink-ghost)", fontWeight: 600, flexShrink: 0 }}>УЧАСТНИКИ:</span>
+          {membersWithRoles.map(m => {
+            const roleEmoji: Record<string, string> = { owner: "👑", admin: "✏️", member: "👁" };
+            const roleLabel: Record<string, string> = { owner: "Владелец", admin: "Редактор", member: "Читатель" };
+            const isMe = m.id === userId;
+            return (
+              <button key={m.id}
+                onClick={() => setProfileUser({ id: m.id, username: m.username, email: m.email, role: m.role })}
+                style={{
+                  display: "flex", alignItems: "center", gap: 4, flexShrink: 0,
+                  background: isMe ? "var(--c-brand-bg)" : "var(--c-surface)",
+                  border: `1px solid ${isMe ? "var(--c-brand-border)" : "var(--c-line-soft)"}`,
+                  borderRadius: "var(--r-full)", padding: "3px 8px 3px 4px",
+                  cursor: "pointer", fontSize: 11, color: "var(--c-ink)",
+                }}>
+                <div className={`avatar avatar-sm ${avatarColor(m.id)}`}
+                  style={{ width: 18, height: 18, fontSize: 9, flexShrink: 0 }}>
+                  {(m.username || m.email || "?")[0].toUpperCase()}
+                </div>
+                <span style={{ fontWeight: isMe ? 700 : 400, color: isMe ? "var(--c-brand)" : "var(--c-ink)" }}>
+                  {m.username || m.email || `#${m.id}`}
+                </span>
+                <span style={{ fontSize: 10, color: "var(--c-ink-ghost)" }} title={roleLabel[m.role]}>
+                  {roleEmoji[m.role] ?? m.role}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
       {/* ── MESSAGES ── */}
       <main ref={messagesRef} style={s.messages}>
@@ -1012,6 +1172,14 @@ export default function ChatScreen({ userId, chat, onBack }) {
                 </div>
               </div>
               {profileUser.phone && <div style={{ fontSize: 13, color: "var(--c-ink-soft)" }}>📱 {profileUser.phone}</div>}
+              {isChannel && profileUser.role && (
+                <div style={{ fontSize: 12, color: "var(--c-ink-muted)", background: "var(--c-surface)", borderRadius: "var(--r-md)", padding: "6px 10px" }}>
+                  {(() => {
+                    const roleMap: Record<string, string> = { owner: "👑 Владелец", admin: "✏️ Редактор", member: "👁 Читатель" };
+                    return roleMap[profileUser.role] ?? profileUser.role;
+                  })()}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -1137,6 +1305,7 @@ export default function ChatScreen({ userId, chat, onBack }) {
         .attach-wrap { position: relative; }
         .attach-wrap:hover > div[style] { display: block !important; }
         button[title="Вниз"]:hover { background: var(--c-brand-bg) !important; transform: scale(1.08); }
+        .member-row:hover { background: var(--c-brand-bg) !important; }
         @keyframes fadeInDown { from { opacity: 0; transform: translateY(-6px); } to { opacity: 1; transform: translateY(0); } }
       `}</style>
     </div>

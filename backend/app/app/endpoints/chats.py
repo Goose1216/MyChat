@@ -214,6 +214,29 @@ async def get_message_readers(
 
 
 @chats.post(
+    "/messages/read_batch/",
+    response_model=schemas.Response[None],
+    name="Записать батч прочтения сообщений",
+    description="Фронт вызывает раз в N минут, передаёт диапазон прочитанных сообщений",
+    responses=get_responses_description_by_codes([401, 403, 404])
+)
+async def create_read_batch(
+    data: schemas.ReadBatchCreateSchema,
+    access_token=Depends(security.decode_jwt_access),
+    uow: IUnitOfWork = Depends(get_unit_of_work),
+):
+    user_id = int(access_token.get("user_id"))
+    chat_service = ChatService(uow)
+    await chat_service.create_read_batch(
+        user_id=user_id,
+        chat_id=data.chat_id,
+        from_id=data.from_id,
+        to_id=data.to_id,
+    )
+    return schemas.Response(data=None)
+
+
+@chats.post(
     "/{chat_id}/{user_id}/typing/",
     response_model=schemas.Response[None],
     name="Поинт для отображение того, что пользователь печатает",
@@ -343,4 +366,32 @@ async def create_chat(
     created_chat_dict['user_id'] = user_id
     created_chat = ChatCreateSchema.model_validate(created_chat_dict)
     chat = await chat_service.create_chat(created_chat, user2_id)
+
+    # Для приватного чата — уведомляем обоих участников по WS
+    # чтобы чат сразу появился в списке без перезагрузки страницы
+    if info_for_created_chat.chat_type.value == "private" and user2_id:
+        import json as _json
+
+        def _serialize(obj):
+            if hasattr(obj, "isoformat"):
+                return obj.isoformat()
+            return str(obj)
+
+        for notify_user_id in [user_id, user2_id]:
+            try:
+                chat_data = await chat_service.get_chat_for_user(
+                    chat_id=chat.id, user_id=notify_user_id
+                )
+                if chat_data:
+                    chat_dict = chat_data.model_dump() if hasattr(chat_data, "model_dump") else dict(chat_data)
+                    await manager.broadcast(
+                        type_of_message=5,
+                        message="",
+                        chat_id=chat.id,
+                        receivers_id=[notify_user_id],
+                        chat=_json.loads(_json.dumps(chat_dict, default=_serialize)),
+                    )
+            except Exception as e:
+                logger.warning(f"Не удалось отправить WS о создании приватного чата: {e}")
+
     return schemas.Response(data=chat)
