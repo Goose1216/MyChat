@@ -127,7 +127,13 @@ class UserRepository(Repository):
         username = user['username']
         user_id = user['user_id'] if user_id is None else user_id
 
-        data = {"user_id" : user_id, "username": username, "session_id": session_id}
+        # Получаем is_superuser из БД
+        stmt = select(self.model).where(self.model.id == user_id)
+        res = await self.session.execute(stmt)
+        user_obj = res.scalar_one_or_none()
+        is_superuser = bool(user_obj.is_superuser) if user_obj else False
+
+        data = {"user_id": user_id, "username": username, "session_id": session_id, "is_superuser": is_superuser}
         tokens = security.create_jwt_tokens(data)
         if tokens:
             refresh_token = tokens['refresh_token']

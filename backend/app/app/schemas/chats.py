@@ -88,3 +88,43 @@ class MemberWithRoleSchema(BaseModel):
 
 class ChangeRoleSchema(BaseModel):
     role: str  # "member" | "admin"  (нельзя передать "owner")
+
+
+# ── Админские схемы ────────────────────────────────────────────────────────
+
+class AdminChatPatch(BaseModel):
+    """Что может изменить администратор у любого чата."""
+    title: str | None = None
+    description: str | None = None
+    is_deleted: bool | None = None
+
+
+class AdminChatParticipantSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    user_id: int
+    username: str | None = None
+    email: str | None = None
+    role: str
+
+
+class AdminChatDetailSchema(ChatSchemaFromBd):
+    """Чат с участниками — для админского просмотра."""
+    participants: List[AdminChatParticipantSchema] = []
+    message_count: int = 0
+
+
+class AdminAddParticipantSchema(BaseModel):
+    user_id: int
+    role: str = "member"
+
+
+class AdminMessageSchema(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    chat_id: int
+    sender_id: int | None = None
+    content: str | None = None
+    is_deleted: bool
+    created_at: datetime

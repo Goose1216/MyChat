@@ -75,6 +75,11 @@ async def decode_jwt_access(token: str = Depends(oauth2_scheme)):
     except jwt.InvalidTokenError:
         raise NotAuthenticated(detail="Неверный токен")
 
+async def require_superuser(token: dict = Depends(decode_jwt_access)):
+    """Зависимость: пропускает только суперпользователей."""
+    if not token.get("is_superuser"):
+        raise InaccessibleEntity(detail="Доступ только для администраторов")
+
 async def decode_jwt_refresh(token: str = Depends(oauth2_scheme)):
     try:
         decode = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

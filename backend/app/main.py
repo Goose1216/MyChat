@@ -8,6 +8,7 @@ from app.app.endpoints.chats import chats
 from app.app.endpoints.tasks import tasks
 from app.app.endpoints.messages import messages
 from app.app.endpoints.files import files
+from app.app.endpoints.admin import admin
 from app.core.config import settings
 from app.logs.config import setup_logging, logger
 
@@ -33,5 +34,6 @@ app.include_router(chats)
 app.include_router(messages)
 app.include_router(files)
 app.include_router(tasks)
+app.include_router(admin)
 
 from app import errors

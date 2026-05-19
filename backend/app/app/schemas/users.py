@@ -15,6 +15,9 @@ class UserSchemaFromBd(BaseModel):
     username: str
     email: str
     phone: str
+    is_superuser: bool = False
+    is_deleted: bool = False
+    created_at: datetime.datetime | None = None
 
 
 class UserSchemaFromBdStatistic(UserSchemaFromBd):
@@ -26,6 +29,22 @@ class UserSchemaPatch(BaseModel):
     username: str | None = None
     email: str | None = None
     phone: str | None = None
+
+
+# ── Админские схемы ────────────────────────────────────────────────────────
+
+class AdminUserPatch(BaseModel):
+    """Что может изменить администратор у любого пользователя."""
+    username: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    is_superuser: bool | None = None
+    is_deleted: bool | None = None
+    is_verified: bool | None = None
+
+
+class AdminSetPassword(BaseModel):
+    new_password: str
 
 
 class UserChangePassword(BaseModel):

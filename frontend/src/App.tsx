@@ -4,11 +4,20 @@ import RegistrationScreen from "./components/RegistrationScreen";
 import ChatsListScreen from "./components/ChatsListScreen";
 import ChatScreen from "./components/ChatScreen";
 import ProfileScreen from "./components/ProfileScreen";
+import AdminScreen from "./components/AdminScreen";
 import type { Chat } from "./types";
 import { WebSocketProvider } from "./Websocket.tsx";
 import { setSessionExpiredCallback } from "./api";
 
-type View = "login" | "register" | "chats" | "chat" | "profile";
+type View = "login" | "register" | "chats" | "chat" | "profile" | "admin";
+
+function parseJwt(token: string): any {
+  try {
+    return JSON.parse(atob(token.split(".")[1]));
+  } catch {
+    return {};
+  }
+}
 
 export default function App() {
   const [token, setToken] = useState<string | null>(
@@ -18,17 +27,19 @@ export default function App() {
     const u = localStorage.getItem("user_id");
     return u ? parseInt(u, 10) : null;
   });
+  const [isSuperuser, setIsSuperuser] = useState<boolean>(() => {
+    const t = localStorage.getItem("access_token");
+    return t ? Boolean(parseJwt(t).is_superuser) : false;
+  });
 
   const [view, setView]                 = useState<View>(token ? "chats" : "login");
   const [selectedChat, setSelectedChat] = useState<Chat | null>(null);
 
-  // Регистрируем коллбэк один раз при монтировании.
-  // api.ts вызовет его когда refresh-токен протухнет.
-  // Никакого window.location.reload() — просто переключаем состояние.
   useEffect(() => {
     setSessionExpiredCallback(() => {
       setToken(null);
       setUserId(null);
+      setIsSuperuser(false);
       setSelectedChat(null);
       setView("login");
     });
@@ -40,6 +51,7 @@ export default function App() {
     localStorage.setItem("user_id", String(id));
     setToken(accessToken);
     setUserId(id);
+    setIsSuperuser(Boolean(parseJwt(accessToken).is_superuser));
     setView("chats");
   };
 
@@ -49,6 +61,7 @@ export default function App() {
     localStorage.removeItem("user_id");
     setToken(null);
     setUserId(null);
+    setIsSuperuser(false);
     setSelectedChat(null);
     setView("login");
   };
@@ -73,9 +86,11 @@ export default function App() {
         <ChatsListScreen
           access_token={token}
           userId={userId}
+          isSuperuser={isSuperuser}
           onSelectChat={(chat: Chat) => { setSelectedChat(chat); setView("chat"); }}
           onLogout={handleLogout}
           onOpenProfile={() => setView("profile")}
+          onOpenAdmin={isSuperuser ? () => setView("admin") : undefined}
         />
       )}
 
@@ -94,6 +109,10 @@ export default function App() {
           onBack={() => setView("chats")}
           onLogout={handleLogout}
         />
+      )}
+
+      {view === "admin" && token && isSuperuser && (
+        <AdminScreen onBack={() => setView("chats")} />
       )}
     </WebSocketProvider>
   );
