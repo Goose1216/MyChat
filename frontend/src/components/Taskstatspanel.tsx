@@ -1,4 +1,5 @@
 import React from "react";
+import * as XLSX from "xlsx";
 import "../design.css";
 
 // ─── colour palette for users ───────────────────────────────────────────────
@@ -130,24 +131,142 @@ export default function TaskStatsPanel({ stats, loading, getName }: Props) {
 
   const maxTotal = Math.max(...stats.map((s) => s.total_tasks), 1);
 
-  // aggregate for global summary bar
- const allStatuses = Array.from(
-  new Set(
-    stats.flatMap((s) =>
-      s.by_status.map((x) => normalizeKey(x.status))
-    )
-  )
-);
- const allPriorities = Array.from(
-  new Set(
-    stats.flatMap((s) =>
-      s.by_priority.map((x) => normalizeKey(x.priority))
-    )
-  )
-);
+  const allStatuses = Array.from(
+    new Set(stats.flatMap((s) => s.by_status.map((x) => normalizeKey(x.status))))
+  );
+  const allPriorities = Array.from(
+    new Set(stats.flatMap((s) => s.by_priority.map((x) => normalizeKey(x.priority))))
+  );
+
+  // ── Excel export ──────────────────────────────────────────────────────────
+
+  const downloadExcel = () => {
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("ru", { day: "2-digit", month: "2-digit", year: "numeric" });
+    const wb = XLSX.utils.book_new();
+
+    // ── Лист 1: Сводная таблица ──────────────────────────────────────────────
+    const summaryHeader = [
+      "Пользователь",
+      "ID",
+      "Всего задач",
+      ...allStatuses.map(s => getStatus(s).label),
+      ...allPriorities.map(p => getPriority(p).label),
+      "% выполнено",
+    ];
+
+    const summaryRows = [...stats]
+      .sort((a, b) => b.total_tasks - a.total_tasks)
+      .map((s, idx) => {
+        const name = getName ? getName(s.user_id) : `#${s.user_id}`;
+        const done = s.by_status.find(x => normalizeKey(x.status) === "DONE")?.count ?? 0;
+        const pct  = s.total_tasks > 0 ? Math.round((done / s.total_tasks) * 100) : 0;
+
+        return [
+          name,
+          s.user_id,
+          s.total_tasks,
+          ...allStatuses.map(st => s.by_status.find(x => normalizeKey(x.status) === st)?.count ?? 0),
+          ...allPriorities.map(pr => s.by_priority.find(x => normalizeKey(x.priority) === pr)?.count ?? 0),
+          `${pct}%`,
+        ];
+      });
+
+    // Итоговая строка
+    const totalsRow = [
+      "ИТОГО",
+      "",
+      stats.reduce((n, s) => n + s.total_tasks, 0),
+      ...allStatuses.map(st => stats.reduce((n, s) => n + (s.by_status.find(x => normalizeKey(x.status) === st)?.count ?? 0), 0)),
+      ...allPriorities.map(pr => stats.reduce((n, s) => n + (s.by_priority.find(x => normalizeKey(x.priority) === pr)?.count ?? 0), 0)),
+      "",
+    ];
+
+    const summaryData = [summaryHeader, ...summaryRows, [], totalsRow];
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+
+    // Ширина колонок
+    ws1["!cols"] = [
+      { wch: 24 }, { wch: 6 }, { wch: 12 },
+      ...allStatuses.map(() => ({ wch: 14 })),
+      ...allPriorities.map(() => ({ wch: 14 })),
+      { wch: 14 },
+    ];
+
+    XLSX.utils.book_append_sheet(wb, ws1, "Сводная таблица");
+
+    // ── Лист 2: Рейтинг ─────────────────────────────────────────────────────
+    const ratingHeader = ["Место", "Пользователь", "Всего задач", "Выполнено", "% выполнено"];
+    const ratingRows = [...stats]
+      .sort((a, b) => b.total_tasks - a.total_tasks)
+      .map((s, idx) => {
+        const name = getName ? getName(s.user_id) : `#${s.user_id}`;
+        const done = s.by_status.find(x => normalizeKey(x.status) === "DONE")?.count ?? 0;
+        const pct  = s.total_tasks > 0 ? Math.round((done / s.total_tasks) * 100) : 0;
+        return [idx + 1, name, s.total_tasks, done, `${pct}%`];
+      });
+
+    const ws2 = XLSX.utils.aoa_to_sheet([ratingHeader, ...ratingRows]);
+    ws2["!cols"] = [{ wch: 8 }, { wch: 24 }, { wch: 14 }, { wch: 12 }, { wch: 14 }];
+    XLSX.utils.book_append_sheet(wb, ws2, "Рейтинг");
+
+    // ── Лист 3: По статусам подробно ─────────────────────────────────────────
+    const statusHeader = ["Пользователь", "Статус", "Количество", "% от всех задач"];
+    const statusRows: any[] = [];
+    [...stats]
+      .sort((a, b) => b.total_tasks - a.total_tasks)
+      .forEach(s => {
+        const name = getName ? getName(s.user_id) : `#${s.user_id}`;
+        s.by_status.forEach(x => {
+          const pct = s.total_tasks > 0 ? Math.round((x.count / s.total_tasks) * 100) : 0;
+          statusRows.push([name, getStatus(normalizeKey(x.status)).label, x.count, `${pct}%`]);
+        });
+      });
+
+    const ws3 = XLSX.utils.aoa_to_sheet([statusHeader, ...statusRows]);
+    ws3["!cols"] = [{ wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws3, "По статусам");
+
+    // ── Лист 4: По приоритетам ────────────────────────────────────────────────
+    const prioHeader = ["Пользователь", "Приоритет", "Количество", "% от всех задач"];
+    const prioRows: any[] = [];
+    [...stats]
+      .sort((a, b) => b.total_tasks - a.total_tasks)
+      .forEach(s => {
+        const name = getName ? getName(s.user_id) : `#${s.user_id}`;
+        s.by_priority.forEach(x => {
+          const pct = s.total_tasks > 0 ? Math.round((x.count / s.total_tasks) * 100) : 0;
+          prioRows.push([name, getPriority(normalizeKey(x.priority)).label, x.count, `${pct}%`]);
+        });
+      });
+
+    const ws4 = XLSX.utils.aoa_to_sheet([prioHeader, ...prioRows]);
+    ws4["!cols"] = [{ wch: 24 }, { wch: 16 }, { wch: 12 }, { wch: 18 }];
+    XLSX.utils.book_append_sheet(wb, ws4, "По приоритетам");
+
+    // ── Скачать ───────────────────────────────────────────────────────────────
+    const filename = `Отчёт_по_задачам_${dateStr.replace(/\./g, "-")}.xlsx`;
+    XLSX.writeFile(wb, filename);
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div style={ds.root}>
+
+      {/* Кнопка скачать */}
+      <div style={{ display: "flex", justifyContent: "flex-end" }}>
+        <button
+          className="btn btn-primary"
+          onClick={downloadExcel}
+          style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 13 }}
+        >
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="currentColor">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/>
+          </svg>
+          Скачать отчёт (.xlsx)
+        </button>
+      </div>
 
       {/* ── LEADERBOARD ───────────────────────────────────────── */}
       <section>
