@@ -4,10 +4,8 @@ import "../design.css";
 
 export default function LoginScreen({
   onLogin,
-  onGoRegister,
 }: {
   onLogin: (token: string, userId: number, refreshToken: string) => void;
-  onGoRegister: () => void;
 }) {
   const [loginValue, setLoginValue] = useState("");
   const [password, setPassword] = useState("");
@@ -82,9 +80,6 @@ export default function LoginScreen({
             <button type="submit" className="btn btn-primary"
               disabled={loading} style={{ width: "100%", height: 42 }}>
               {loading ? <span className="spinner" style={{ borderTopColor: "#fff" }} /> : "Войти"}
-            </button>
-            <button type="button" className="btn" onClick={onGoRegister} style={{ width: "100%", height: 42 }}>
-              Создать аккаунт
             </button>
           </div>
         </form>

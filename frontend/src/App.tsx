@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from "react";
 import LoginScreen from "./components/LoginScreen";
-import RegistrationScreen from "./components/RegistrationScreen";
 import ChatsListScreen from "./components/ChatsListScreen";
 import ChatScreen from "./components/ChatScreen";
 import ProfileScreen from "./components/ProfileScreen";
@@ -9,7 +8,7 @@ import type { Chat } from "./types";
 import { WebSocketProvider } from "./Websocket.tsx";
 import { setSessionExpiredCallback } from "./api";
 
-type View = "login" | "register" | "chats" | "chat" | "profile" | "admin";
+type View = "login" | "chats" | "chat" | "profile" | "admin";
 
 function parseJwt(token: string): any {
   try {
@@ -69,17 +68,7 @@ export default function App() {
   return (
     <WebSocketProvider>
       {view === "login" && (
-        <LoginScreen
-          onLogin={handleLogin}
-          onGoRegister={() => setView("register")}
-        />
-      )}
-
-      {view === "register" && (
-        <RegistrationScreen
-          onRegistered={() => setView("login")}
-          onGoLogin={() => setView("login")}
-        />
+        <LoginScreen onLogin={handleLogin} />
       )}
 
       {view === "chats" && token && userId !== null && (

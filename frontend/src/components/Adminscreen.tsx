@@ -262,6 +262,71 @@ function StatsTab() {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  CREATE USER MODAL
+// ══════════════════════════════════════════════════════════════════════════════
+
+function CreateUserModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const [form, setForm] = useState({ username: "", email: "", phone: "", password: "" });
+  const [saving, setSaving] = useState(false);
+  const [error, setError]   = useState("");
+
+  const set = (k: string, v: string) => setForm(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!form.username || !form.email || !form.password) {
+      setError("Заполните обязательные поля: имя, email, пароль"); return;
+    }
+    setSaving(true); setError("");
+    try {
+      const r = await fetchWithAuth(`${API}/users/register/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      if (!r.ok) {
+        const d = await r.json();
+        throw new Error(d.errors?.[0]?.message ?? d.detail ?? "Ошибка создания");
+      }
+      onCreated(); onClose();
+    } catch (e: any) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div className="modal-backdrop">
+      <div className="modal" style={{ maxWidth: 420 }}>
+        <div className="modal-header">
+          <span className="modal-title">👤 Новый пользователь</span>
+          <button className="modal-close" onClick={onClose}>✕</button>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+          {[
+            ["Имя пользователя *", "username", "text",     "ivanov_ii"],
+            ["Email *",            "email",    "email",    "ivanov@company.ru"],
+            ["Телефон",            "phone",    "tel",      "+79001234567"],
+            ["Пароль *",           "password", "password", "••••••••"],
+          ].map(([label, key, type, placeholder]) => (
+            <div className="field" key={key}>
+              <label>{label}</label>
+              <input className="input" type={type} placeholder={placeholder}
+                value={(form as any)[key]} onChange={e => set(key, e.target.value)}
+                style={{ height: 38 }} />
+            </div>
+          ))}
+          {error && <div className="alert alert-error">{error}</div>}
+          <div className="modal-footer" style={{ marginTop: 4 }}>
+            <button className="btn" onClick={onClose}>Отмена</button>
+            <button className="btn btn-primary" onClick={save} disabled={saving}>
+              {saving ? "Создание…" : "Создать"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  USER EDIT MODAL
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -389,6 +454,7 @@ function UsersTab() {
   const [search, setSearch]         = useState("");
   const [inclDel, setInclDel]       = useState(false);
   const [editUser, setEditUser]     = useState<User | null>(null);
+  const [showCreate, setShowCreate] = useState(false);
   const [confirm, setConfirm]       = useState<{ id: number; hard: boolean; name: string } | null>(null);
 
   const load = useCallback(async () => {
@@ -421,6 +487,10 @@ function UsersTab() {
         <span style={{ marginLeft: "auto", fontSize: 11, color: "var(--c-ink-ghost)", fontFamily: "var(--font-mono)" }}>
           {users.length} записей
         </span>
+        <button className="btn btn-primary" onClick={() => setShowCreate(true)}
+          style={{ fontSize: 12, padding: "6px 14px", flexShrink: 0 }}>
+          + Создать
+        </button>
       </div>
 
       {/* Table */}
@@ -456,10 +526,9 @@ function UsersTab() {
                   <TD>
                     <div style={{ display: "flex", gap: 3 }}>
                       <ABtn title="Редактировать" onClick={() => setEditUser(u)}>✏️</ABtn>
-                      {u.is_superuser
-                        ? <ABtn title="Снять права"                onClick={() => revokeSuper(u.id)}>👑</ABtn>
-                        : <ABtn title="Сделать суперпользователем" onClick={() => makeSuperuser(u.id)}>⬆️</ABtn>
-                      }
+                      {u.is_superuser && (
+                        <ABtn title="Снять права суперпользователя" danger onClick={() => revokeSuper(u.id)}>👑</ABtn>
+                      )}
                       {!u.is_deleted && <ABtn title="Мягкое удаление" danger onClick={() => setConfirm({ id: u.id, hard: false, name: u.username })}>🗑️</ABtn>}
                       <ABtn title="Полное удаление из БД" danger onClick={() => setConfirm({ id: u.id, hard: true, name: u.username })}>💥</ABtn>
                     </div>
@@ -471,6 +540,7 @@ function UsersTab() {
         )}
       </div>
 
+      {showCreate && <CreateUserModal onClose={() => setShowCreate(false)} onCreated={load} />}
       {editUser && <UserEditModal user={editUser} onClose={() => setEditUser(null)} onSaved={load} />}
       {confirm && (
         <Confirm

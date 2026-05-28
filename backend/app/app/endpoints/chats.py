@@ -71,7 +71,8 @@ async def websocket_endpoint(websocket: WebSocket):
                 await manager.broadcast(type_of_message=0, message=text, chat_id=chat_id, receivers_id=members_chat,
                                         message_id=message.id, sender_id=user_id,
                                         created_at=message.created_at.isoformat(),
-                                        updated_at=message.updated_at.isoformat(), sender=message.sender.model_dump())
+                                        updated_at=message.updated_at.isoformat(),
+                                        sender=message.sender.model_dump(mode='json'))
 
 
             except WebSocketDisconnect:

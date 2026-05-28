@@ -49,7 +49,7 @@ async def update_message(
                             receivers_id=members_chat, message_id=message_id, sender_id=message_for_return.sender_id,
                             created_at=message_for_return.created_at.isoformat(),
                             updated_at=message_for_return.updated_at.isoformat(),
-                            sender=message_for_return.sender.model_dump())
+                            sender=message_for_return.sender.model_dump(mode='json'))
 
     return schemas.Response(data=message_for_return)
 
@@ -82,7 +82,7 @@ async def delete_message(
                             is_deleted=message_for_return.is_deleted,
                             created_at=message_for_return.created_at.isoformat(),
                             updated_at=message_for_return.updated_at.isoformat(),
-                            sender=message_for_return.sender.model_dump())
+                            sender=message_for_return.sender.model_dump(mode='json'))
 
     return schemas.Response(data=message_for_return)
 
@@ -139,9 +139,9 @@ async def upload_file(
     )
     message = await message_service.get_one(message.id)
 
-    await manager.broadcast(type_of_message=0, message=None, chat_id=chat_id, file=created_file.model_dump(),
+    await manager.broadcast(type_of_message=0, message=None, chat_id=chat_id, file=created_file.model_dump(mode='json'),
                             receivers_id=members_chat, message_id=message.id, sender_id=user_id,
                             created_at=message.created_at.isoformat(),
-                            updated_at=message.updated_at.isoformat(), sender=message.sender.model_dump())
+                            updated_at=message.updated_at.isoformat(), sender=message.sender.model_dump(mode='json'))
 
     return schemas.Response(data=message)

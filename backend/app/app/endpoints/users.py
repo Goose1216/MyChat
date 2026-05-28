@@ -38,8 +38,10 @@ async def get_user(
 @users.post(
     "/register/",
     response_model=schemas.Response[schemas.UserSchemaFromBd],
-    name="Зарегистрироваться",
-    responses=get_responses_description_by_codes([401, 403])
+    name="Создать пользователя (только администратор)",
+    description="Регистрация закрыта. Создавать пользователей может только суперпользователь.",
+    responses=get_responses_description_by_codes([401, 403]),
+    dependencies=[Depends(security.require_superuser)],
 )
 async def add_user(user_data: UserSchemaRegister, uow: IUnitOfWork = Depends(get_unit_of_work)):
     user_service = UserService(uow)
